@@ -20,6 +20,7 @@ Stap voor stap door AetherLink Academy als squadlid. Alle labels komen letterlij
    Het veld toont de placeholder "Bijv. 8A2F…".
 4. Klik op "Deelnemen".
    De applicatie opent "Squad-room".
+   Een facilitator kan ook een uitnodigingslink sturen die de squadcode vooraf invult; vul dan alleen nog je naam in.
 5. Controleer de roster.
    Je ziet "Jouw squad ({n}/5)", je eigen naam met "(jij)", je rol "Driver" of "Navigator" en de aanwezigheid "Recent actief" of "Geen recente activiteit".
 6. Deel de code alleen met je squad.

@@ -15,8 +15,11 @@ test('browser reads and native suggestion decisions enforce credential and revie
  await new Promise(r=>instance.server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${instance.server.address().port}`;
  const request=(route,token,method='GET',asCookie=false)=>fetch(base+route,{method,headers:asCookie?{cookie:`academy=${token}`}:{authorization:`Bearer ${token}`}});
+ const jsonRequest=(route,body)=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  try{
   const host=instance.store.create('Auth room',{slug:'auth-room',editor:'proof-test-token'});
+  for(const [route,body] of [['/game/facilitator/overview',{hostKey:'wrong'}],['/game/facilitator/attach',{hostKey:'wrong',roomId:host.roomId}]]){const response=await jsonRequest(route,body);assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'Ongeldige facilitator-startsleutel.'});}
+  const overview=await jsonRequest('/game/facilitator/overview',{hostKey:'test-host'});assert.equal(overview.status,200);assert.ok(Array.isArray(await overview.json()));
   const driver=instance.store.join(host.code,'Driver');
   const navigator=instance.store.join(host.code,'Navigator');
   instance.store.join(host.code,'Third');

@@ -26,11 +26,23 @@ Stap voor stap door AetherLink Academy als facilitator. Alle labels komen letter
    Je ziet "Jouw squad (0/5)" en "Wacht op je squad. Deel de kamercode om te beginnen.".
 6. Deel de code met je squad.
    In het blok "Kamercode" staat de code met de knop "Kopieer kamercode".
+   Gebruik daarnaast "Kopieer uitnodigingslink" om een link te delen die de code alvast invult.
 7. Bewaak de groepsgrootte.
    Een squad heeft vier of vijf mensen.
    Bij vijf leden verschijnt "Squad is vol (maximaal 5).".
 8. Controleer de rolverdeling.
    De applicatie heeft op elk moment precies één "Driver".
+
+## Meerdere squads en facilitatoren
+
+1. Kies op het aanmeldscherm "Facilitator-overzicht".
+   Deze weergave vraagt alleen om de facilitator-startsleutel.
+2. Vul de startsleutel in en klik op "Toon overzicht".
+   Je ziet alle aangemaakte squads, hun kamercode, ronde, timer, roster en bewijsstatus.
+3. Kies bij de gewenste squad "Open als facilitator".
+   Je komt in die "Squad-room" terecht zonder de bestaande facilitator-sessie te vervangen.
+4. Gebruik dezelfde facilitator-startsleutel voor extra begeleiding.
+   Meerdere facilitatoren kunnen met dezelfde facilitator-startsleutel aan dezelfde squad attachen.
 
 ## Ronde starten, pauzeren, volgende fase en driver roteren
 
@@ -52,6 +64,11 @@ Stap voor stap door AetherLink Academy als facilitator. Alle labels komen letter
    Alleen deze actie roteert de driver.
 9. Controleer de timer bij afloop.
    De timer roteert de driver nooit automatisch.
+10. Pas de resterende tijd aan bij "Tijd (min)".
+    De waarde wordt opgeslagen wanneer je het veld verlaat of Enter gebruikt.
+11. Gebruik "+5 min" of "-5 min" voor een snelle aanpassing.
+12. Stel de standaardduur van nieuwe rondes in bij "Rondetijd (min)".
+    Een volgende ronde gebruikt deze rondetijd.
 
 ## Suggesties en bewijs reviewen, handoff afronden
 
