@@ -1,0 +1,27 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {randomUUID} from 'node:crypto';
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+const base=process.env.ACADEMY_URL||'http://127.0.0.1:4317';
+async function req(route,body,token,expected=200){const res=await fetch(base+route,{method:body?'POST':'GET',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}: {})},body:body?JSON.stringify(body):undefined});const d=await res.json();assert.equal(res.status,expected,JSON.stringify(d));return d;}
+test('room authorization, real MCP bridge evidence and human handoff',async()=>{
+ const host=await req('/game/create',{name:'Integration '+Date.now(),hostKey:process.env.ACADEMY_HOST_KEY||readFileSync('.data/host-key','utf8')});const people=[];for(const name of ['A','B','C','D'])people.push(await req('/game/join',{code:host.code,name}));
+ await req('/game/state',null,null,401);await req('/game/control',{action:'next'},people[0].token,403);await req('/game/control',{action:'start'},host.token);const state=await req('/game/state',null,people[0].token);assert.equal(state.running,true);await req('/game/control',{action:'pause'},host.token);
+ const other=await req('/game/create',{name:'Other room',hostKey:process.env.ACADEMY_HOST_KEY||readFileSync('.data/host-key','utf8')});const otherState=await req('/game/state',null,other.token);
+ const cross=await fetch(base+'/d/'+otherState.documentSlug,{headers:{cookie:'academy='+people[0].token}});assert.equal(cross.status,403);
+ const m=await req('/game/mcp-token',{},people[0].token);await req('/game/control',{action:'next'},m.token,401);await req('/game/mcp/get_mission',{},people[0].token,401);
+ const transport=new StdioClientTransport({command:process.execPath,args:['server/mcp.mjs'],env:{...process.env,ACADEMY_URL:base,ACADEMY_TOKEN:m.token}});const client=new Client({name:'academy-integration-test',version:'1'});await client.connect(transport);
+ try{const tools=await client.listTools();assert.equal(tools.tools.length,5);assert(!tools.tools.some(t=>/accept|rotate|rewrite/.test(t.name)));
+ const call=async(name,args={})=>{const r=await client.callTool({name,arguments:args});assert(!r.isError,JSON.stringify(r));return JSON.parse(r.content[0].text);};
+ assert.equal((await call('get_mission')).mission.id,'ATLAS-REVIEW-01');assert.equal((await call('search_knowledge',{query:''})).lessons.length,10);assert.equal((await call('search_knowledge',{query:'MCP'})).lessons.some(l=>l.id==='L2-MCP'),true);
+ const before=await call('get_document');assert.match(before.markdown,/Onze intent/);
+ const data={requestId:randomUUID(),finding:'Integration test: README verwijst naar verify.',command:'node --test (fixture check performed by test harness separately)',observed:'Dit is testbewijs voor de transportkoppeling, geen echte deelnemerprestatie.',limitation:'Claude Code-account is niet getest.'};
+ const a=await call('submit_evidence',data);const b=await call('submit_evidence',data);assert.equal(a.id,b.id);assert.equal((await req('/game/state',null,people[1].token)).evidence.length,1);
+ const after=await call('get_document');assert.match(JSON.stringify(after.marks),/Integration test/);assert.equal(after.markdown,before.markdown,'Evidence comments must not overwrite accepted text');
+ const suggestion=await call('suggest_document',{requestId:randomUUID(),quote:'Een verse lezer kan de juiste controle uitvoeren en de uitkomst uitleggen.',content:'Een verse lezer voert node --test uit en legt uit wat die controle wel en niet bewijst.'});assert(suggestion);const proposed=await call('get_document');assert.equal(proposed.markdown,before.markdown,'Suggestion must not silently accept text');assert.match(JSON.stringify(proposed.marks),/suggestion|replace/);
+ const marks=await req('/game/suggestions',null,host.token);const pending=marks.find(m=>m.status==='pending');assert(pending);await req('/game/suggestion-review',{id:pending.id,decision:'accept',requestId:randomUUID()},people[1].token,403);await req('/game/suggestion-review',{id:pending.id,decision:'accept',requestId:randomUUID()},m.token,401);await req('/game/suggestion-review',{id:pending.id,decision:'accept',requestId:randomUUID()},host.token);assert.match((await call('get_document')).markdown,/voert node --test uit/);
+ await req('/game/review',{requestId:randomUUID(),id:a.id,status:'accepted',note:'Eigen bewijs mag niet.'},people[0].token,403);
+ await req('/game/control',{action:'next'},host.token);await req('/game/review',{requestId:randomUUID(),id:a.id,status:'accepted',note:'Testpayload en Proof-commentaar vergeleken; inhoud is geen leerprestatie.'},people[1].token);
+ await req('/game/handoff',{requestId:randomUUID(),decision:'Transportkoppeling gecontroleerd',checked:'Stdio MCP en Proof-state',open:'Twee echte accounts nog handmatig testen'},people[1].token);
+ const final=await req('/game/state',null,host.token);assert.equal(final.handoffs.length,1);assert.equal(final.evidence[0].status,'accepted');
+ const replacement=await req('/game/mcp-token',{},people[0].token);assert(replacement.token!==m.token);await req('/game/mcp/get_mission',{},m.token,401);
+ }finally{await client.close();}
+});

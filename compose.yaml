@@ -1,0 +1,16 @@
+services:
+  academy:
+    build: .
+    ports:
+      - "127.0.0.1:4317:4317"
+    env_file:
+      - .env
+    environment:
+      ACADEMY_STORAGE: postgres
+      ACADEMY_PUBLIC_URL: ${ACADEMY_PUBLIC_URL:-http://127.0.0.1:4317}
+    volumes:
+      - academy-data:/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+volumes:
+  academy-data:

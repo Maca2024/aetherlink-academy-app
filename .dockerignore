@@ -1,0 +1,32 @@
+# Dependencies and VCS metadata are installed or rebuilt in the image.
+**/node_modules
+**/.git
+
+# Runtime, local credentials, and database files must never enter the build
+# context. Vercel instances use the ephemeral ACADEMY_DATA path from the image.
+**/.data
+**/.verification
+**/.env*
+**/.mcp.json
+**/*.db*
+**/*host-key
+**/*proof-signing-key
+
+# Generated server output and local test artifacts.
+**/dist-server
+**/snapshots
+**/test-results
+**/playwright-report
+**/coverage
+**/.nyc_output
+**/*.log
+clipboard-qa.html
+
+# macOS metadata is never application input.
+**/.DS_Store
+
+# Local tooling and provider credentials are never container input.
+**/.vercel
+**/.codex
+work
+outputs

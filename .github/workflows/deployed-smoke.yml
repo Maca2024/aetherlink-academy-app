@@ -1,0 +1,43 @@
+name: Academy deployed smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Immutable Academy HTTPS deployment URL
+        required: true
+        type: string
+      revision:
+        description: Full deployed source commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.creator.login == 'vercel[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify deployed identity, readiness and authentication
+        env:
+          SMOKE_BASE_URL: ${{ inputs.url || github.event.deployment_status.environment_url }}
+          EXPECTED_REVISION: ${{ inputs.revision || github.event.deployment.sha }}
+        run: node scripts/deployed-smoke.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: deployed-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/deployed-smoke.json
+          if-no-files-found: error
+          retention-days: 14
