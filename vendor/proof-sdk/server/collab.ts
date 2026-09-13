@@ -5073,16 +5073,43 @@ async function seedLegacyDocumentToPersistedYjs(slug: string, row: DocumentRow):
     };
 }
 async function seedLegacyDocumentToPersistedYjsAsync(slug: string, row: DocumentRow): Promise<PersistedDocState> {
+    const totalStartedAt = performance.now();
     const ydoc = new Y.Doc();
     const markdown = stripEphemeralCollabSpans(row.markdown ?? '');
     const rawMarkdown = row.markdown ?? '';
-    const marks = await recoverLegacyAuthoredMarks(rawMarkdown, parseStoredMarks(row.marks) as Record<string, StoredMark>);
+    console.warn('[collab] legacy seed start', { slug, markdownLength: markdown.length, pid: process.pid });
+    const marksStartedAt = performance.now();
+    let marks: Record<string, StoredMark>;
+    try {
+        marks = await recoverLegacyAuthoredMarks(rawMarkdown, parseStoredMarks(row.marks) as Record<string, StoredMark>);
+    }
+    catch (error) {
+        console.warn('[collab] legacy seed failed', { slug, stage: 'marks', elapsedMs: Math.round(performance.now() - marksStartedAt), error: String(error) });
+        throw error;
+    }
     ydoc.transact(() => {
         ydoc.getText('markdown').insert(0, markdown);
         applyMarksMapDiff(ydoc.getMap('marks'), marks);
     }, 'legacy-seed-markdown');
-    await seedFragmentFromLegacyMarkdown(ydoc, markdown);
-    return (await persistCanonicalYjsBaseline(slug, row, ydoc));
+    const fragmentStartedAt = performance.now();
+    try {
+        await seedFragmentFromLegacyMarkdown(ydoc, markdown);
+    }
+    catch (error) {
+        console.warn('[collab] legacy seed failed', { slug, stage: 'fragment', elapsedMs: Math.round(performance.now() - fragmentStartedAt), error: String(error) });
+        throw error;
+    }
+    const persistStartedAt = performance.now();
+    let persisted: PersistedDocState;
+    try {
+        persisted = await persistCanonicalYjsBaseline(slug, row, ydoc);
+    }
+    catch (error) {
+        console.warn('[collab] legacy seed failed', { slug, stage: 'persist', elapsedMs: Math.round(performance.now() - persistStartedAt), error: String(error) });
+        throw error;
+    }
+    console.warn('[collab] legacy seed timing', { slug, marksMs: Math.round(fragmentStartedAt - marksStartedAt), fragmentMs: Math.round(persistStartedAt - fragmentStartedAt), persistMs: Math.round(performance.now() - persistStartedAt), totalMs: Math.round(performance.now() - totalStartedAt), pid: process.pid });
+    return (persisted);
 }
 export async function ensureCanonicalYjsBaselineForDocument(slug: string): Promise<boolean> {
     if (!slug)

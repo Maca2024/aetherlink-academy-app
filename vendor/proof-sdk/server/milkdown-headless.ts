@@ -199,6 +199,8 @@ async function getHeadlessMilkdown(): Promise<HeadlessMilkdown> {
   if (resolvedEngine) return resolvedEngine;
   if (!enginePromise) {
     const generation = engineGeneration;
+    const startedAt = performance.now();
+    console.warn('[collab] headless milkdown engine initialising', { pid: process.pid });
     // If initialization fails once, don't permanently poison the singleton with a rejected promise.
     enginePromise = buildHeadless()
       .then((engine) => {
@@ -206,9 +208,11 @@ async function getHeadlessMilkdown(): Promise<HeadlessMilkdown> {
           throw new Error('stale_headless_milkdown_initialization');
         }
         resolvedEngine = engine;
+        console.warn('[collab] headless milkdown engine ready', { elapsedMs: Math.round(performance.now() - startedAt), pid: process.pid });
         return engine;
       })
       .catch((error) => {
+        console.warn('[collab] headless milkdown engine failed', { elapsedMs: Math.round(performance.now() - startedAt), error: String(error) });
         if (generation === engineGeneration) {
           enginePromise = null;
           resolvedEngine = null;
