@@ -1,0 +1,32 @@
+name: Qlty
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qlty-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: qltysh/qlty-action/install@08a0a862c159eae9b9003081da6663d96efef637 # v2.3.0
+      # Pull requests fail only on new high-level issues relative to the base branch.
+      - if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: qlty check --upstream "origin/$BASE_REF" --no-fix --level=low --fail-level=high --no-progress --no-upgrade-check
+      # Pushes to main report the full picture without failing the build.
+      - if: github.event_name == 'push'
+        run: qlty check --all --no-fix --no-fail --level=low --no-progress --no-upgrade-check

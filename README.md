@@ -46,6 +46,18 @@ De eerdere integratie- en samenwerkingstests vereisen een draaiende server via `
 
 De oorspronkelijke rendererhang is lokaal opgelost en opnieuw in de browser gecontroleerd. Publieke acceptatie en de volledige gedistribueerde regressie zijn nog niet geslaagd. [PROGRESS.md](PROGRESS.md) bevat de actuele resultaten en beperkingen. Het [gedateerde browserrapport](../demo/VERIFICATION.md) is een werkmapartefact buiten deze repository. Zie ook [architectuur](docs/ARCHITECTURE.md).
 
-Dit is een lokaal pilot-MVP: de driverrol stuurt de werkvorm, geen exclusief schrijfrecht in Proof. Alle menselijke editors kunnen het document bewerken. Namen/squadcodes zijn geen geverifieerde identiteit. De tien ingebouwde lessen zijn een compacte MVP-inhoud; het volledige externe curriculumdocument is niet geïmporteerd. Enkele native Proof-bedieningen zijn Engels. Liveblocks is beoordeeld maar niet geïntegreerd. De private broncoderepository is [RyanLisse/aetherlink-academy-app](https://github.com/RyanLisse/aetherlink-academy-app). WIP-bronpublicatie is geen releasebewijs; een publieke deployment is nog niet geverifieerd.
+Dit is een lokaal pilot-MVP: de driverrol stuurt de werkvorm, geen exclusief schrijfrecht in Proof. Alle menselijke editors kunnen het document bewerken. Namen/squadcodes zijn geen geverifieerde identiteit. De tien ingebouwde lessen zijn een compacte MVP-inhoud; het volledige externe curriculumdocument is niet geïmporteerd. Enkele native Proof-bedieningen zijn Engels. Liveblocks is beoordeeld maar niet geïntegreerd. De broncoderepository is [RyanLisse/aetherlink-academy-app](https://github.com/RyanLisse/aetherlink-academy-app) en de publieke deployment draait op https://aetherlink-academy-app.vercel.app in Vercel-regio fra1. Deployed acceptatie wordt bewezen met `scripts/deployed-mcp-check.mjs` en `scripts/deployed-browser-acceptance.mjs`; zie [handleiding deelnemer](docs/handleiding-deelnemer.md) en [handleiding facilitator](docs/handleiding-facilitator.md).
+
+## Kwaliteitschecks
+
+Twee scanners lopen naast de tests. Beide zijn adviserend op pushes naar `main` en rapporteren op pull requests alleen nieuwe problemen.
+
+```sh
+npx react-doctor@latest src
+qlty check --all --no-fix
+qlty githooks install
+```
+
+React Doctor scant de React-frontend in `src/`; `doctor.config.json` sluit de vendored Proof SDK en buildoutput uit. Qlty draait actionlint, zizmor, shellcheck, hadolint, radarlint-iac, osv-scanner, trufflehog en ripgrep vanuit `.qlty/qlty.toml`; er zijn bewust geen formatters ingeschakeld. De git hooks in `.qlty/hooks` draaien de checks op gewijzigde bestanden voor elke push. Installeer de Qlty CLI met `curl -fsSL https://qlty.sh | bash`.
 
 Proof is vendored vanaf [EveryInc/proof-sdk](https://github.com/EveryInc/proof-sdk), commit `fb2578758f1c62776301209131181643c5f4a19a`, inclusief MIT-licentie. Lokale integratieaanpassingen staan in de architectuurnotitie.
