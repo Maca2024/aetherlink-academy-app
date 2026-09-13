@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {randomUUID} from 'node:crypto';
-import {Client} from '@modelcontextprotocol/sdk/client/index.js';import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+import {Client} from '@modelcontextprotocol/client';import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 const base=process.env.ACADEMY_URL||'http://127.0.0.1:4317';
 async function req(route,body,token,expected=200){const res=await fetch(base+route,{method:body?'POST':'GET',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}: {})},body:body?JSON.stringify(body):undefined});const d=await res.json();assert.equal(res.status,expected,JSON.stringify(d));return d;}
 test('room authorization, real MCP bridge evidence and human handoff',async()=>{

@@ -1,8 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {chmodSync, mkdirSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {Client} from '@modelcontextprotocol/sdk/client/index.js';
-import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {Client,StreamableHTTPClientTransport} from '@modelcontextprotocol/client';
 
 const academyUrl = process.env.ACADEMY_URL;
 const hostKey = process.env.ACADEMY_HOST_KEY;
@@ -125,6 +124,23 @@ const callTool = async (client, name, args = {}) => {
 };
 
 const mcpUrl = new URL('/mcp', baseUrl);
+const checkEra = async (name, versionNegotiation, expectedEra) => check(name, async () => {
+  const eraClient = new Client({name: `deployed-mcp-check-${expectedEra}`, version: '1'}, versionNegotiation ? {versionNegotiation} : undefined);
+  try {
+    await eraClient.connect(new StreamableHTTPClientTransport(mcpUrl, {requestInit: {headers: authHeaders(state.mcpA1)}}));
+    const tools = (await eraClient.listTools()).tools || [];
+    if (tools.length !== 5 || tools.some(tool => /accept|rotate|rewrite/i.test(tool.name))) throw new Error(`expected exactly 5 allowed tools, got ${tools.length}`);
+    const mission = await callTool(eraClient, 'get_mission');
+    if (mission.mission?.id !== 'ATLAS-REVIEW-01') throw new Error('mission shape mismatch');
+    const era = eraClient.getProtocolEra();
+    if (era !== expectedEra) throw new Error(`expected protocol era ${expectedEra}, got ${era}`);
+    return `era ${era}, 5 tools, mission ${mission.mission.id}`;
+  } finally {
+    await eraClient.close().catch(() => {});
+  }
+});
+await checkEra('era_modern_2026_07_28', {mode: {pin: '2026-07-28'}}, 'modern');
+await checkEra('era_legacy_2025', undefined, 'legacy');
 const client = new Client({name: 'deployed-mcp-check', version: '1'});
 let clientError = null;
 try {

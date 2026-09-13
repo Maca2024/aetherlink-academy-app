@@ -8,7 +8,8 @@ import {Store,secret,hash,fail} from './store.mjs';
 import {LocalStore} from './local-store.mjs';
 import {Proof} from './proof.mjs';
 import {createAcademyMcpServer} from './mcp-tools.mjs';
-import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {createMcpHandler,validateHostHeader} from '@modelcontextprotocol/server';
+import {toNodeHandler} from '@modelcontextprotocol/node';
 import {lessons,mission,initialDocument,searchKnowledge} from './content.mjs';
 const text=(v,max=4000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail(400,`Vul tekst in (maximaal ${max} tekens).`);return v.trim();};
 const cookie=req=>req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith('academy='))?.slice(8);
@@ -94,13 +95,14 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   await store.withSession(token,'mcp',({p})=>{p.lastMcp=new Date().toISOString();});return result;}
  app.post('/game/mcp/:tool',wrap(async(req,res)=>res.json(await executeMcp(bearer(req),req.params.tool,req.body))));
  app.get('/game/connection',wrap(async(req,res)=>{await browser(req);res.json({transport:'streamable-http',mcpUrl:publicUrl.origin+'/mcp',remoteConfigured:publicUrl.protocol==='https:',status:publicUrl.protocol==='https:'?'Remote-adres geconfigureerd; externe bereikbaarheid nog te controleren.':'Lokale preview. Er is nog geen publieke remote MCP uitgerold.'});}));
+ const mcpHandler=createMcpHandler(()=>createAcademyMcpServer((tool,input,ctx)=>{const auth=ctx.http?.req?.headers.get('authorization')||'';return executeMcp(auth.startsWith('Bearer ')?auth.slice(7):'',tool,input);}),{legacy:'stateless',responseMode:'json'});
+ const mcpNodeHandler=toNodeHandler(mcpHandler);
  app.all('/mcp',wrap(async(req,res)=>{
   try{await store.auth(bearer(req),'mcp');}catch(e){res.setHeader('WWW-Authenticate','Bearer realm="academy"');throw e;}
   if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Stateless Streamable HTTP ondersteunt hier alleen POST.'});}
-  const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true,enableDnsRebindingProtection:true,allowedHosts:[publicUrl.host],allowedOrigins:req.headers.origin?[publicUrl.origin]:undefined});
-  const mcp=createAcademyMcpServer((tool,input)=>executeMcp(bearer(req),tool,input));
-  res.on('close',()=>{void transport.close();void mcp.close();});
-  await mcp.connect(transport);await transport.handleRequest(req,res,req.body);
+  if(!validateHostHeader(req.headers.host,[publicUrl.hostname]).ok)return res.status(403).json({error:'Ongeldige Host-header.'});
+  if(req.headers.origin&&req.headers.origin!==publicUrl.origin)return res.status(403).json({error:'Andere origin niet toegestaan.'});
+  await mcpNodeHandler(req,res,req.body);
  }));
  app.get('/game/starter/:file',wrap(async(req,res)=>{await browser(req);if(!['README.md','CLAUDE.md','package.json','status.mjs','status.test.mjs'].includes(req.params.file))fail(404,'Bestand niet gevonden.');res.type('text/plain').send(readFileSync(path.join(root,'starter',req.params.file),'utf8'));}));
  app.get('/game/health',wrap(async(_req,res)=>{let connected=false;try{connected=(await fetch(proofBase+'/health',{signal:AbortSignal.timeout(2000)})).ok;}catch{}res.json({ok:true,proof:connected,revision:process.env.VERCEL_GIT_COMMIT_SHA||process.env.SOURCE_REVISION||null});}));
