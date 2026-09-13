@@ -31,7 +31,9 @@ jobs:
           package-manager-cache: false
       - name: Verify deployed identity, readiness and authentication
         env:
-          SMOKE_BASE_URL: ${{ inputs.url || github.event.deployment_status.environment_url }}
+          # Vercel Authentication (Standard Protection) guards the immutable
+          # deployment URL, so automatic production smoke targets the public alias.
+          SMOKE_BASE_URL: ${{ inputs.url || (github.event.deployment.environment == 'Production' && 'https://aetherlink-academy-app.vercel.app') || github.event.deployment_status.environment_url }}
           EXPECTED_REVISION: ${{ inputs.revision || github.event.deployment.sha }}
         run: node scripts/deployed-smoke.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

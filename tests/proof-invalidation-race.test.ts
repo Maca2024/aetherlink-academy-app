@@ -13,7 +13,7 @@ for (const selfInvalidation of [false, true]) test(`invalidation drains SQL, rol
   const paused = new Promise<void>(resolve => { release = resolve; });
   try {
     await db.initializeDatabase();
-    const slug = 'invalidate-race';
+    const slug = `invalidate-race-${selfInvalidation ? 'self' : 'external'}`;
     await db.createDocument(slug, '# Original\n', {}, 'Race', 'test', randomUUID());
     const handle = await collab.loadCanonicalYDoc(slug, { liveRequired: false });
     assert(handle);
