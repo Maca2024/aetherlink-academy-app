@@ -67,7 +67,7 @@ jobs:
         id: unit
         run: >-
           node --import ./vendor/proof-sdk/node_modules/tsx/dist/loader.mjs --test
-          tests/room.test.mjs tests/remote-mcp.test.mjs tests/runtime-config.test.mjs tests/browser-auth-boundary.test.mjs tests/headless-empty-document.test.ts tests/collab-marks-observer.test.ts tests/anchor-stability.test.ts
+          tests/room.test.mjs tests/remote-mcp.test.mjs tests/proof-stale-retry.test.mjs tests/runtime-config.test.mjs tests/browser-auth-boundary.test.mjs tests/headless-empty-document.test.ts tests/collab-marks-observer.test.ts tests/anchor-stability.test.ts
       - name: Run Proof marks regressions
         id: marks
         working-directory: vendor/proof-sdk
