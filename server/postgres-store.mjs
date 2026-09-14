@@ -75,7 +75,7 @@ export class PostgresStore {
   });
  }
  async facilitatorLogin(identity) {
-  return this.transaction(async client=>{await client.query('DELETE FROM facilitator_sessions WHERE expires_at < now()');const token=secret();await client.query('INSERT INTO facilitator_sessions(token_hash,sub,email,name,domain,expires_at) VALUES ($1,$2,$3,$4,$5,$6)',[hash(token),identity.sub,identity.email,identity.name,identity.domain,Date.now()+12*60*60*1000]);return token;});
+  return this.transaction(async client=>{await client.query('DELETE FROM facilitator_sessions WHERE expires_at < $1',[Date.now()]);const token=secret();await client.query('INSERT INTO facilitator_sessions(token_hash,sub,email,name,domain,expires_at) VALUES ($1,$2,$3,$4,$5,$6)',[hash(token),identity.sub,identity.email,identity.name,identity.domain,Date.now()+12*60*60*1000]);return token;});
  }
  async facilitator(token) {
   if(!token)return null;return this.transaction(async client=>{const key=hash(token);await client.query('DELETE FROM facilitator_sessions WHERE token_hash=$1 AND expires_at<$2',[key,Date.now()]);const result=await client.query('SELECT sub,email,name,domain FROM facilitator_sessions WHERE token_hash=$1',[key]);return result.rows[0]||null;});
