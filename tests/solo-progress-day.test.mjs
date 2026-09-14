@@ -24,7 +24,7 @@ function fixture(){
  return {instance,host,participant};
 }
 
-test('get_mission returns day 1 ATLAS-REVIEW-01 and day 2 ATLAS-CONTEXT-02',async()=>{
+test('get_mission returns day 1 and the corrected day 2 mission',async()=>{
  const {instance,host,participant}=fixture();
  const mcp=instance.store.session(instance.store.auth(participant.token).r.id,instance.store.auth(participant.token).p.id,'mcp');
  const day1=await invoke(instance.app,'/game/mcp/:tool',{body:{},cookies:{},query:{}});
@@ -46,7 +46,7 @@ test('get_mission returns day 1 ATLAS-REVIEW-01 and day 2 ATLAS-CONTEXT-02',asyn
  assert.equal(change.statusCode,200);
  const second=await mcpCall('get_mission');
  assert.equal(second.statusCode,200);
- assert.equal(second.body.mission.id,'ATLAS-CONTEXT-02');
+ assert.equal(second.body.mission.id,'ATLAS-FEEDBACK-02');
  assert.equal(second.body.day,2);
  assert.equal(second.body.mission.title,getDayPack(2).mission.title);
 });
@@ -60,7 +60,7 @@ test('day 2 quiz does not overwrite day 1 progressByDay quiz record',async()=>{
  assert.equal(after1.progressByDay['1'].quizScore,3);
  assert.equal(after1.progressByDay['1'].route,'stretch');
  await invoke(instance.app,'/game/control',{body:{action:'day',value:2},cookies:{academy:host.token}});
- const q2=await invoke(instance.app,'/game/quiz',{body:{answers:[0,0,1]},cookies:{academy:participant.token}});
+ const q2=await invoke(instance.app,'/game/quiz',{body:{answers:[0,1,0]},cookies:{academy:participant.token}});
  assert.equal(q2.statusCode,200);
  assert.equal(q2.body.score,0);
  assert.equal(q2.body.route,'guided');
@@ -108,7 +108,6 @@ test('day pack exposes mission and reviewCriteria for Solo/Review UI',async()=>{
  assert.ok(d1.body.mission.starterFiles.includes('README.md'));
  await invoke(instance.app,'/game/control',{body:{action:'day',value:2},cookies:{academy:host.token}});
  const d2=await invoke(instance.app,'/game/day-pack',{cookies:{academy:participant.token}});
- assert.equal(d2.body.mission.id,'ATLAS-CONTEXT-02');
- assert.match(d2.body.mission.starterNote,/zelfde starterbestanden/);
- assert.ok(d2.body.reviewCriteria.some(c=>c.includes('PLACEHOLDER')));
+ assert.equal(d2.body.mission.id,'ATLAS-FEEDBACK-02');
+ assert.ok(d2.body.reviewCriteria.every(c=>!c.includes('PLACEHOLDER')));
 });

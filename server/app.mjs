@@ -1,4 +1,5 @@
 import express from 'express';
+import {dayProgress,debrief,exportDebrief} from './progress.mjs';
 import http from 'node:http';
 import httpProxy from 'http-proxy';
 import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
@@ -65,11 +66,14 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.get('/game/knowledge',wrap(async(req,res)=>{const {r}=await browser(req);const pack=getDayPack(r.day);res.json({lessons:searchKnowledge(String(req.query.q||'')),mission:pack?.mission||mission});}));
  const publicDayPack=pack=>({...pack,quiz:{questions:pack.quiz.questions}});
  app.get('/game/day-pack',wrap(async(req,res)=>{const {r}=await browser(req),pack=getDayPack(r.day);if(!pack)fail(400,`Geen contentpakket voor supportdag ${r.day}.`);res.json(publicDayPack(pack));}));
- app.get('/game/day-route',wrap(async(req,res)=>{const {r,p}=await browser(req);const mine=p?.progressByDay||{};const days=listRouteDays().map(d=>{const key=String(d.day);const stored=mine[key]||mine[d.day]||{};const evidenceCount=(r.evidence||[]).filter(e=>e.personId===p?.id&&Number(e.day)===d.day).length;return {...d,progress:{quizScore:stored.quizScore??null,route:stored.route??null,evidenceCount,hasQuiz:stored.quizScore!=null,hasRoute:Boolean(stored.route),hasEvidence:evidenceCount>0}};});res.json({day:r.day,days});}));
+ app.get('/game/day-route',wrap(async(req,res)=>{const {r,p}=await browser(req);res.json({day:r.day,days:listRouteDays().map(d=>({...d,progress:dayProgress(r,p,d.day)}))});}));
+ app.post('/game/reflection',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(403,'Alleen deelnemers schrijven een eigen reflectie.');const reflection={learned:text(req.body.learned),next:text(req.body.next),at:new Date().toISOString()};p.progressByDay??={};p.progressByDay[String(r.day)]={...p.progressByDay[String(r.day)],reflection};return reflection;}))));
+ app.get('/game/debrief',wrap(async(req,res)=>{const {r,s}=await browser(req);if(s.personId!=='facilitator')fail(403,'Alleen de facilitator bekijkt de debrief.');res.json(debrief(r));}));
+ app.get('/game/debrief/export',wrap(async(req,res)=>{const {r,s}=await browser(req);if(s.personId!=='facilitator')fail(403,'Alleen de facilitator exporteert de debrief.');res.type('text/markdown').set('Content-Disposition','attachment; filename="squad-overdracht.md"').send(exportDebrief(r));}));
  app.get('/game/document',wrap(async(req,res)=>{const {r}=await browser(req);res.json(await proof.state(r));}));
  app.post('/game/help',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({p})=>{if(!p)fail(400,'De facilitator heeft geen solo-profiel.');p.help=!p.help;return {help:p.help};}))));
  app.post('/game/quiz',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(400,'Alleen deelnemers.');const pack=getDayPack(r.day);if(!pack)fail(400,`Geen contentpakket voor supportdag ${r.day}.`);const answers=req.body?.answers,expected=pack.quiz.questions.length;if(!Array.isArray(answers)||answers.length!==expected)fail(400,`Beantwoord alle ${expected} vragen.`);if(answers.some((answer,index)=>!Number.isInteger(answer)||answer<0||answer>=pack.quiz.questions[index].options.length))fail(400,'Gebruik een geldige optie voor elke vraag.');const score=answers.filter((answer,index)=>answer===pack.quiz.answers[index]).length;const at=new Date().toISOString();p.route=score<=1?'guided':score===2?'standard':'stretch';p.quiz={score,at,day:r.day};p.progressByDay=p.progressByDay||{};p.progressByDay[String(r.day)]={...(p.progressByDay[String(r.day)]||{}),quizScore:score,route:p.route,quizAt:at};return {score,route:p.route,day:r.day,note:'Voorlopige hulpkeuze op basis van 3 scenario’s; geen vaardigheidsbewijs of permanent label.'};}))));
- app.post('/game/route',wrap(async(req,res)=>{if(!['guided','standard','stretch'].includes(req.body.route))fail(400,'Ongeldige hulpkeuze.');await store.withSession(token(req),'browser',({p})=>{if(!p)fail(400,'Alleen deelnemers.');p.route=req.body.route;});res.json({ok:true});}));
+ app.post('/game/route',wrap(async(req,res)=>{if(!['guided','standard','stretch'].includes(req.body.route))fail(400,'Ongeldige hulpkeuze.');await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(400,'Alleen deelnemers.');p.route=req.body.route;p.progressByDay??={};p.progressByDay[String(r.day)]={...p.progressByDay[String(r.day)],route:p.route};});res.json({ok:true});}));
  app.post('/game/mcp-token',wrap(async(req,res)=>res.json(await store.rotateMcpToken(token(req)))));
  function reviewer({r,s}){if(s.personId!=='facilitator'&&s.personId!==r.members[r.driver]?.id)fail(403,'Driver of facilitator beoordeelt het bewijs.');}
  async function commentQuote(r){const state=await proof.state(r);const quote=state.markdown.split('\n').find(line=>line.trim())?.replace(/^#+\s*/,'').trim();if(!quote)fail(409,'Het document heeft nog geen tekst voor commentaar.');return quote;}
@@ -95,7 +99,7 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.post('/game/handoff',wrap(async(req,res)=>{
   const {r,s}=await browser(req);
   const fields={decision:text(req.body.decision),checked:text(req.body.checked),open:text(req.body.open)},key=text(req.body.requestId,100),fingerprint=hash(JSON.stringify(fields));
-  const saved=await store.reserveRequest(token(req),'handoff',key,fingerprint,{value:{id:randomUUID(),by:s.personId,...fields,next:r.members[(r.driver+1)%r.members.length]?.name||'Nog te bepalen',at:new Date().toISOString()},actor:`human:${s.personId}`,quote:await commentQuote(r)},reviewer);if(saved.completed)return res.json(saved.result);
+  const saved=await store.reserveRequest(token(req),'handoff',key,fingerprint,{value:{id:randomUUID(),day:r.day,by:s.personId,...fields,next:r.members[(r.driver+1)%r.members.length]?.name||'Nog te bepalen',at:new Date().toISOString()},actor:`human:${s.personId}`,quote:await commentQuote(r)},reviewer);if(saved.completed)return res.json(saved.result);
   const {value:h,actor,quote}=saved.intent;await proof.comment(r,actor,`Overdracht\nBesluit: ${h.decision}\nGecontroleerd: ${h.checked}\nOpen: ${h.open}\nVolgende eigenaar: ${h.next}`,quote,h.id);
   res.json(await store.completeRequest(token(req),'handoff',key,fingerprint,context=>{context.r.handoffs.push(h);return h;}));
  }));
@@ -118,7 +122,7 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   if(req.headers.origin&&req.headers.origin!==publicUrl.origin)return res.status(403).json({error:'Andere origin niet toegestaan.'});
   await mcpNodeHandler(req,res,req.body);
  }));
- app.get('/game/starter/:file',wrap(async(req,res)=>{await browser(req);if(!['README.md','CLAUDE.md','package.json','status.mjs','status.test.mjs'].includes(req.params.file))fail(404,'Bestand niet gevonden.');res.type('text/plain').send(readFileSync(path.join(root,'starter',req.params.file),'utf8'));}));
+ app.get('/game/starter/:file',wrap(async(req,res)=>{await browser(req);if(!['README.md','CLAUDE.md','package.json','status.mjs','status.test.mjs','n8n-repository-review.json','n8n-review-README.md','claude-code-review-README.md','day5-fictional-issue.md'].includes(req.params.file))fail(404,'Bestand niet gevonden.');res.type('text/plain').send(readFileSync(path.join(root,'starter',req.params.file),'utf8'));}));
  app.get('/game/health',wrap(async(_req,res)=>{let connected=false;try{connected=(await fetch(proofBase+'/health',{signal:AbortSignal.timeout(2000)})).ok;}catch{}res.json({ok:true,proof:connected,revision:process.env.VERCEL_GIT_COMMIT_SHA||process.env.SOURCE_REVISION||null});}));
  app.use(express.static(path.join(root,'dist')));app.get('/',(_req,res)=>res.sendFile(path.join(root,'dist/index.html')));
  app.use((e,req,res,_next)=>{if(!e.status)console.error('[academy] unhandled',{method:req.method,path:req.path,message:e?.message,stack:e?.stack});return res.status(e.status||500).json({error:e.status?e.message:'Onverwachte serverfout. Probeer opnieuw; je invoer blijft staan.'});});

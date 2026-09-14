@@ -40,47 +40,55 @@ const day1Mission={
  hints:['Vergelijk README.md met de scripts in package.json.','Voer de beschikbare test uit met node --test.','Een mislukte opdracht is óók bewijs; noteer de echte fout.'],
  stretch:'Ontwerp een controle die voorkomt dat de README weer achterloopt. Waarom vangt de bestaande test dit niet?'
 };
-const day2Placeholder='PLACEHOLDER — wacht op quizbank/vijfdagenplan';
+const curriculumSource='Bewerking van het interne Squad 2-programma, geraadpleegd op 14 september 2026; scenario-vragen zijn nieuw oefenmateriaal.';
+const sourceLink='docs/LEARNING-ROUTE.md';
+const authoredQuiz=(question,options)=>({source:'authored-adaptation',question,options});
+const feedbackLoop=[
+ {label:'Intent',prompt:'Welk probleem lossen we op en welk bewijs telt?'},
+ {label:'Plan',prompt:'Wat is de kleinste wijziging en hoe controleren we die?'},
+ {label:'Wijziging',prompt:'Welke ene, omkeerbare stap voeren we uit?'},
+ {label:'Test',prompt:'Welke lokale controle is werkelijk uitgevoerd?'},
+ {label:'Review',prompt:'Wat besluit een menselijke reviewer op basis van bewijs?'},
+ {label:'Handoff',prompt:'Wat moet een verse lezer weten en wie neemt het over?'}
+];
 const day2Pack={
  day:2,
- title:days[1],
+ title:'Van intent naar een gecontroleerde wijziging',
  tag:'Begeleid',
- blurb:'Begrijp hoe context, skills, MCP en bewijs samen een begrensde agenttaak uitvoerbaar maken.',
+ blurb:'Doorloop één kleine wijziging van intent tot reproduceerbare overdracht.',
+ source:curriculumSource,sourceLink,
  lesson:{
-  kicker:'Les 2 · Dieper begrijpen',
-  title:'Geef een agent de juiste context',
-  lede:'Maak zichtbaar welke informatie, instructie, tool en menselijke beslissing nodig zijn om een controle betrouwbaar uit te voeren.',
-  loop:[
-   {label:'Context',prompt:'Welke informatie is relevant voor deze taak?'},
-   {label:'Instructie',prompt:'Welke afspraak maakt het gedrag herhaalbaar?'},
-   {label:'Tool',prompt:'Welke toegang is echt nodig?'},
-   {label:'Bewijs',prompt:'Welke waarneming kan een ander opnieuw controleren?'}
-  ],
-  workedExample:`Een skill beschrijft een herhaalbare werkwijze; die geeft niet vanzelf toegang tot een systeem. MCP kan informatie of tools ontsluiten, maar de kamertoken begrenst de toegang. Leg daarom per stap vast wat de agent leest, uitvoert en overdraagt. ${day2Placeholder} voor aanvullingen uit de goedgekeurde leerplanning.`
+  kicker:'Les 2 · Feedbackloop',title:'Van intent naar een gecontroleerde wijziging',
+  lede:'Oefen intent → plan → kleine wijziging → test → review → handoff. Context, tools en menselijke beslissingen blijven zichtbaar.',
+  loop:feedbackLoop,
+  workedExample:'Vergelijk README.md met package.json. Leg één kleine documentatiecorrectie vast, voer node --test uit, laat een verse lezer de controle herhalen en vraag een mens om PASS, REVISE of OPEN. Een afgewezen voorstel blijft zichtbaar als open vervolgstap.'
  },
  quiz:{
   questions:[
-   {question:'Welke afspraak hoort bij duurzame projectcontext?',options:['Een geheim in een gedeelde prompt bewaren','Een losse chatboodschap als enige bron gebruiken','Een korte, vindbare afspraak in CLAUDE.md vastleggen']},
-   {question:'Wat is de juiste conclusie na een geslaagde MCP-aanroep?',options:['De agent mag nu alle systemen gebruiken','De toegestane tool leverde informatie binnen de geldende kamertoken','De agent heeft zelfstandig de beslissing genomen']},
-   {question:'Welke overdracht maakt een bevinding reproduceerbaar?',options:['Bestand, commando, waargenomen uitvoer en beperking','Alleen een samenvatting van de agent','Een screenshot zonder context of volgende eigenaar']}
+   authoredQuiz('Welke evidence sluit de feedbackloop na een kleine README-wijziging?',['Alleen een agentsamenvatting','Het werkelijk uitgevoerde commando, de uitvoer en een verse-reader resultaat','Een groter plan zonder controle']),
+   authoredQuiz('Wat doe je als de menselijke reviewer het voorstel afwijst?',['De afwijzing en volgende stap als OPEN vastleggen','De reviewer overslaan','De wijziging toch accepteren']),
+   authoredQuiz('Een agent vraagt Jira-toegang voor deze lokale controle. Wat doe je?',['De token delen','Toegang geven omdat het sneller is','Stoppen en uitleggen waarom de toegang buiten scope valt'])
   ],
-  answers:[2,1,0]
+  answers:[1,0,2]
  },
  mission:{
-  id:'ATLAS-CONTEXT-02',
-  title:'Maak context en bewijs overdraagbaar',
+  id:'ATLAS-FEEDBACK-02',title:'Maak één gecontroleerde verbetering',
   minutes:25,
-  goal:'Onderzoek welke context de fictieve Atlas-repository nodig heeft. Lever een capability-map en één controleerbare aanbeveling zonder extra toegang te vragen.',
+  goal:'Maak één kleine, controleerbare verbetering in de fictieve Atlas-repository en draag intent, plan, wijziging, testuitkomst, reviewbesluit en open risico over.',
   allowed:['Lees alleen de meegeleverde starterbestanden.','Gebruik alleen lokale commando’s in je eigen kopie.','Dien bewijs en een suggestie in; een mens beslist over acceptatie.'],
   stop:'Stop bij ontbrekende bestanden, geheimen of benodigde toegang buiten de starter. Meld wat ontbreekt; verzin geen uitvoer.',
-  checks:['Koppel context, instructie, tool, skill en menselijk oordeel aan concrete observaties.','Vermeld het werkelijk uitgevoerde commando en de uitvoer.','Beschrijf waarom dit het doel raakt en wat nog niet is bewezen.'],
+  checks:['Leg alle zes loopstappen vast met concrete observaties.','Vermeld het werkelijk uitgevoerde commando en de uitvoer.','Laat een verse lezer de controle herhalen en noteer reviewer, beperking en volgende eigenaar.'],
   starterFiles,
-  hints:['Maak eerst een capability-map van context, instructie, tool, skill en menselijk oordeel.','Vraag alleen de kleinste toegang die de lokale controle nodig heeft.','Leg je bevinding vast voor een verse lezer.'],
-  stretch:'Ontwerp een minimale contextchecklist die een verse lezer kan hergebruiken zonder extra tools.',
-  starterNote:'Deze missie gebruikt dezelfde starterbestanden als dag 1 (tijdelijk, tot aparte fixtures beschikbaar zijn).'
+  hints:['Begin met intent en plan voordat je een bestand wijzigt.','Kies één kleine, omkeerbare README-correctie.','Een niet-uitgevoerde of afgewezen stap blijft OPEN; verzin geen resultaat.'],
+  stretch:'Maak een herbruikbare feedbackloop-checklist voor een verse lezer.'
  },
- reviewCriteria:['De capability-map is gekoppeld aan concrete bestanden of uitvoer.','De controle is door een tweede deelnemer te herhalen.','Onzekerheden en menselijke beslispunten blijven zichtbaar.',day2Placeholder]
+ reviewCriteria:['Alle zes loopstappen zijn zichtbaar.','De wijziging is klein en reproduceerbaar getest.','Een menselijke reviewer en eventuele REVISE/OPEN-uitkomst zijn vastgelegd.']
 };
+
+const commonMission=(id,title,goal,starterFilesOverride,extra)=>({id,title,minutes:25,goal,allowed:['Gebruik alleen fictieve, lokale starterdata en read-only tools.','Voer uitsluitend lokale commando’s uit.','Lever bewijs in; een mens beslist over acceptatie.'],stop:'Stop bij secrets, ontbrekende input, externe toegang of een resultaat dat je niet werkelijk hebt uitgevoerd.',checks:['Verwijs naar concrete input, output en beperkingen.','Vermeld het werkelijk uitgevoerde commando of de runstatus.','Draag over aan een verse lezer met eigenaar en volgende stap.'],starterFiles:starterFilesOverride,...extra});
+const day3Pack={day:3,title:days[2],tag:'Coaching',blurb:'Inspecteer één begrensde lokale repository-reviewworkflow in n8n.',source:curriculumSource,sourceLink,scenario:{id:'GL-REVIEW-001',kind:'fictional',externalWrites:false},lesson:{kicker:'Les 3 · Agents in n8n',title:'Een begrensde reviewagent',lede:'Bouw of inspecteer één lokale fixture-in, structured-review-out workflow met een menselijke gate.',loop:[{label:'Input',prompt:'Welke fictieve repository-fixture leest de workflow?'},{label:'Adapter',prompt:'Welke adapter geeft die input door?'},{label:'Review',prompt:'Welke modelstap of handmatige fallback wordt gebruikt?'},{label:'Output',prompt:'Welke velden maken de bevinding toetsbaar?'},{label:'Gate',prompt:'Wie beoordeelt vóór acceptatie?'}],workedExample:'Importeer starter/n8n-repository-review.json en inspecteer de nodes. Run de fixture-check zonder API key; label dit deterministic-run. Alleen een werkelijk vastgelegde provider-run mag AI-run heten.'},quiz:{questions:[authoredQuiz('Wat bewijst dat de n8n-agent echt draaide?',['Een geïmporteerde workflow','Een captured run met input, output en trace','Een ingevulde voorbeeldoutput'])],answers:[1]},mission:commonMission('ATLAS-N8N-03','Inspecteer de lokale n8n-reviewagent','Leg adapter, model/fallback, input, output, trace en menselijke beoordeling vast zonder GitLab-account.', ['starter/n8n-repository-review.json','starter/n8n-review-README.md'],{hints:['Run eerst de deterministic fixture-check.','Noteer live modelrun als OPEN wanneer geen provider is geconfigureerd.'],stretch:'Ontwerp één extra schema-check zonder externe toegang.'}),reviewCriteria:['Workflow is lokaal importeerbaar en read-only.','Output bevat finding, file, evidence, severity, suggested_next_step en needs_human_decision.','Deterministic-run en AI-run zijn expliciet onderscheiden.','Human gate blijft verplicht.'],openGates:['live n8n/model smoke test','external GitLab access']};
+const day4Pack={day:4,title:days[3],tag:'Hints',blurb:'Bouw dezelfde reviewtaak opnieuw in Claude Code met read-only grenzen.',source:curriculumSource,sourceLink,scenario:{id:'GL-REVIEW-001',kind:'fictional',externalWrites:false},lesson:{kicker:'Les 4 · Agents in Claude Code',title:'Zelfde taak, andere agent',lede:'Gebruik eigen Claude Code met CLAUDE.md, read-only tools, trace en een hook die een out-of-scope write blokkeert.',loop:[{label:'Fresh context',prompt:'Kan een nieuwe context het doel terugvinden?'},{label:'Read',prompt:'Welke lokale bestanden mag Claude lezen?'},{label:'Trace',prompt:'Welke stappen zijn werkelijk gelogd?'},{label:'Guard',prompt:'Wat blokkeert de PreToolUse-hook?'},{label:'Compare',prompt:'Welke verschillen met n8n zijn waargenomen?'}],workedExample:'Werk met de lokale GL-REVIEW-001-fixture. Vraag eerst om onderzoek, laat een write buiten scope blokkeren en bewaar de trace. Claim geen modelrun wanneer alleen handmatige of deterministic checks zijn uitgevoerd.'},quiz:{questions:[authoredQuiz('Wat bewijst een PreToolUse-blokkade?',['Dat één geconfigureerde actie is geweigerd','Dat de hele review correct is','Dat productie veilig kan worden aangepast'])],answers:[0]},mission:commonMission('ATLAS-CLAUDE-04','Herbouw de lokale reviewtaak','Voer dezelfde fictieve review uit met eigen Claude Code, CLAUDE.md, read-only tools, trace en hook.', ['starter/claude-code-review-README.md','starter/n8n-repository-review.json'],{hints:['Gebruik geen API-key buiten je bestaande eigen setup.','Laat een fresh reader de handoff en trace begrijpen.'],stretch:'Leg één verschil met n8n vast als observatie, niet als algemene conclusie.'}),reviewCriteria:['Fresh-context rerun is reproduceerbaar.','Read-only scope, trace en hookresultaat zijn zichtbaar.','Verschillen met n8n zijn observaties met bewijs.','Geen onuitgevoerde AI-run wordt geclaimd.'],openGates:['provider/model availability','external writes']};
+const day5Pack={day:5,title:days[4],tag:'Zelfstandig',blurb:'Doorloop een klein fictief teamissue van intent tot handoff.',source:curriculumSource,sourceLink,scenario:{id:'GL-REVIEW-001',kind:'fictional',externalWrites:false},lesson:{kicker:'Les 5 · Transfer',title:'Een teamissue end-to-end',lede:'Kies één kleine fictieve wijziging en sluit de artefactketen met review, human gate en overdracht.',loop:[{label:'Intent',prompt:'Welk klein probleem kiezen we?'},{label:'Plan',prompt:'Welke controleerbare stap volgt?'},{label:'Agentwerk',prompt:'Welke begrensde lokale taak voer je uit?'},{label:'Verify',prompt:'Welke checks en reviewerresultaat bestaan er?'},{label:'Handoff',prompt:'Wie neemt welke OPEN-stap over?'}],workedExample:'Kies een lokale fixturewijziging. GitLab, Jira en Confluence blijven mock of OPEN. Een PASS geldt alleen na menselijke beoordeling; anders draag je REVISE of OPEN over.'},quiz:{questions:[authoredQuiz('Wat doe je als een extern ticket niet is goedgekeurd?',['Het veld OPEN laten, lokale evidence bewaren en de approval-behoefte overdragen','Een ticket aanmaken met een gedeelde token','Doen alsof de link bestaat'])],answers:[0]},mission:commonMission('ATLAS-TEAM-05','Voer één fictief teamissue uit','Doorloop intent, plan, begrensd agentwerk, lokale checks, review, human gate en reproduceerbare handoff.', ['starter/README.md','starter/package.json','starter/status.mjs','starter/status.test.mjs'],{hints:['Kies één kleine slice en benoem eigenaar en risico.','Gebruik mock/OPEN voor externe systemen.'],stretch:'Laat een tweede deelnemer de volledige handoff met maximaal één hint uitvoeren.'}),reviewCriteria:['Artefactketen en eigenaar zijn compleet.','Lokale check is werkelijk uitgevoerd en reproduceerbaar.','Human gate is PASS, REVISE of OPEN met reden.','Externe integraties blijven mock/OPEN.'],openGates:['external GitLab/Jira/Confluence approval','production access']};
 const dayPacks={
  1:{
   day:1,
@@ -92,21 +100,15 @@ const dayPacks={
   mission:day1Mission,
   reviewCriteria:mission.checks
  },
- 2:day2Pack
+ 2:day2Pack,3:day3Pack,4:day4Pack,5:day5Pack
 };
 export function getDayPack(day){return dayPacks[day]??null;}
 export function listDaySummaries(){return Object.values(dayPacks).map(({day,title,tag,blurb})=>({day,title,tag,blurb}));}
 
-const routeFallbacks={
- 3:{tag:'Coaching',blurb:'Een begrensde agenttaak, toegestane tools en menselijke evaluatie.'},
- 4:{tag:'Hints',blurb:'Een reproduceerbare Claude Code-werkwijze met instructies en gerichte tools.'},
- 5:{tag:'Zelfstandig',blurb:'Een gewijzigde taak aanpakken en je bewijs verantwoorden.'}
-};
 export function listRouteDays(){
  return days.map((title,i)=>{
   const day=i+1,pack=dayPacks[day];
   if(pack)return {day,title:pack.title,tag:pack.tag,blurb:pack.blurb,hasLesson:true};
-  const fallback=routeFallbacks[day];
-  return {day,title,tag:fallback.tag,blurb:fallback.blurb,hasLesson:false};
+  return {day,title,tag:'OPEN',blurb:'Nog geen dagpakket beschikbaar.',hasLesson:false};
  });
 }

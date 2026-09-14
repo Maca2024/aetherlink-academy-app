@@ -2,6 +2,8 @@
 
 Nederlandse leeromgeving met een echt, doorlopend Proof-document, squads van 4–5, één driver, facilitatorbediening, privé-quiz, brongebonden kennisbank en bewijs/review/handoff. Eigen Claude Code werkt via een beperkte MCP-bridge. De app bevat geen modelchat en vraagt geen Anthropic API-key.
 
+Zie [de vijf supportdagen](docs/LEARNING-ROUTE.md) voor inhoud, voortgang en de grenzen van de oefeningen.
+
 ## Starten
 
 Vereist Node.js 24 en pnpm 11.19.0. Voer vanuit deze map uit:

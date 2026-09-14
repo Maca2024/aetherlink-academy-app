@@ -33,7 +33,7 @@ test('day 1 quiz scores the extracted key and selects stretch',async()=>{
  assert.equal(wrong.body.route,'guided');
 });
 
-test('day 2 quiz uses the day 2 pack after facilitator control',async()=>{
+test('day 2 quiz uses the complete feedback-loop pack after facilitator control',async()=>{
  const {instance,host,participant}=fixture();
  const changeDay=await invoke(instance.app,'/game/control',{body:{action:'day',value:2},cookies:{academy:host.token}});
  assert.equal(changeDay.statusCode,200);
@@ -46,19 +46,22 @@ test('day 2 quiz uses the day 2 pack after facilitator control',async()=>{
  assert.equal(publicPack.statusCode,200);
  assert.equal(publicPack.body.day,2);
  assert.equal(publicPack.body.quiz.answers,undefined);
- assert.ok(publicPack.body.lesson.workedExample.includes('PLACEHOLDER — wacht op quizbank/vijfdagenplan'));
+ assert.deepEqual(publicPack.body.lesson.loop.map(step=>step.label),['Intent','Plan','Wijziging','Test','Review','Handoff']);
 });
 
-test('quiz rejects wrong answer arity and missing pack days with 400',async()=>{
+test('quiz rejects wrong answer arity and accepts every implemented day pack',async()=>{
  const {instance,host,participant}=fixture();
  const wrongLength=await invoke(instance.app,'/game/quiz',{body:{answers:[1,0]},cookies:{academy:participant.token}});
  assert.equal(wrongLength.statusCode,400);
  assert.match(wrongLength.body.error,/Beantwoord alle 3 vragen/);
- const changeDay=await invoke(instance.app,'/game/control',{body:{action:'day',value:3},cookies:{academy:host.token}});
- assert.equal(changeDay.statusCode,200);
- const missing=await invoke(instance.app,'/game/quiz',{body:{answers:[1,0,2]},cookies:{academy:participant.token}});
- assert.equal(missing.statusCode,400);
- assert.match(missing.body.error,/Geen contentpakket voor supportdag 3/);
- const publicMissing=await invoke(instance.app,'/game/day-pack',{cookies:{academy:participant.token}});
- assert.equal(publicMissing.statusCode,400);
+ for(const day of [3,4,5]){
+  const changeDay=await invoke(instance.app,'/game/control',{body:{action:'day',value:day},cookies:{academy:host.token}});
+  assert.equal(changeDay.statusCode,200);
+  const result=await invoke(instance.app,'/game/quiz',{body:{answers:getDayPack(day).quiz.answers},cookies:{academy:participant.token}});
+  assert.equal(result.statusCode,200);
+  assert.equal(result.body.score,getDayPack(day).quiz.questions.length);
+  const publicPack=await invoke(instance.app,'/game/day-pack',{cookies:{academy:participant.token}});
+  assert.equal(publicPack.statusCode,200);
+  assert.equal(publicPack.body.quiz.answers,undefined);
+ }
 });

@@ -1,0 +1,33 @@
+{
+  "name": "Atlas local repository review (fixture only)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Local fixture input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { scenario: 'GL-REVIEW-001', runKind: 'deterministic-fixture-check', finding: 'Inspect fixture manually; no model call is configured.', file: 'starter/README.md', evidence: 'This workflow contains only a local manual trigger and this code node.', severity: 'OPEN', suggested_next_step: 'A human reviews the evidence before accepting any change.', needs_human_decision: true } }];"
+      },
+      "id": "fixture-check",
+      "name": "Deterministic fixture check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Local fixture input": {
+      "main": [[{"node": "Deterministic fixture check", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "atlas-local-fixture-v1",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

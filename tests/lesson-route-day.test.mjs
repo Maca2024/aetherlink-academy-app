@@ -45,7 +45,7 @@ test('day 1 lesson pack and route days stay available',async()=>{
  }
  assert.equal(route.body.days[0].hasLesson,true);
  assert.equal(route.body.days[0].blurb,getDayPack(1).blurb);
- assert.equal(route.body.days[2].hasLesson,false);
+ assert.equal(route.body.days[2].hasLesson,true);
 });
 
 test('facilitator day control switches lesson pack and highlights day 2 on route',async()=>{
@@ -58,7 +58,7 @@ test('facilitator day control switches lesson pack and highlights day 2 on route
  assert.equal(pack.body.day,2);
  assert.equal(pack.body.lesson.title,getDayPack(2).lesson.title);
  assert.equal(pack.body.lesson.lede,getDayPack(2).lesson.lede);
- assert.ok(pack.body.lesson.workedExample.includes('PLACEHOLDER — wacht op quizbank/vijfdagenplan'));
+ assert.deepEqual(pack.body.lesson.loop.map(step=>step.label),['Intent','Plan','Wijziging','Test','Review','Handoff']);
  assert.equal(pack.body.quiz.questions[0].question,getDayPack(2).quiz.questions[0].question);
  const route=await invoke(instance.app,'/game/day-route',{cookies:{academy:participant.token}});
  assert.equal(route.statusCode,200);
@@ -68,16 +68,16 @@ test('facilitator day control switches lesson pack and highlights day 2 on route
  assert.equal(route.body.days[1].hasLesson,true);
 });
 
-test('day without pack keeps route cards and rejects lesson pack with 400',async()=>{
+test('day three exposes the n8n pack and keeps route cards consistent',async()=>{
  const {instance,host,participant}=fixture();
  const change=await invoke(instance.app,'/game/control',{body:{action:'day',value:3},cookies:{academy:host.token}});
  assert.equal(change.statusCode,200);
  const pack=await invoke(instance.app,'/game/day-pack',{cookies:{academy:participant.token}});
- assert.equal(pack.statusCode,400);
- assert.match(pack.body.error,/Geen contentpakket voor supportdag 3/);
+ assert.equal(pack.statusCode,200);
+ assert.equal(pack.body.mission.id,'ATLAS-N8N-03');
  const route=await invoke(instance.app,'/game/day-route',{cookies:{academy:participant.token}});
  assert.equal(route.statusCode,200);
  assert.equal(route.body.day,3);
- assert.equal(route.body.days[2].hasLesson,false);
+ assert.equal(route.body.days[2].hasLesson,true);
  assert.match(route.body.days[2].title,/Samen bouwen/);
 });
