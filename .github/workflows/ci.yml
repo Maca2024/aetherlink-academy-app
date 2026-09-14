@@ -118,6 +118,14 @@ jobs:
           ACADEMY_DISTRIBUTED_TEST=1 ACADEMY_TEST_LOG_DIR="$RUNNER_TEMP"
           node --import ./vendor/proof-sdk/node_modules/tsx/dist/loader.mjs --test
           tests/distributed.test.mjs
+      - name: Show distributed process logs on failure
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP"/distributed-*.log; do
+            [[ -f "$f" ]] || continue
+            echo "===== $f"
+            tail -n 200 "$f"
+          done
       - name: Record check outcomes
         if: always()
         env:
