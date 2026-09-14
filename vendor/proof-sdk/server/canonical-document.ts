@@ -1019,9 +1019,16 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
   const nextMarksBase = hasExplicitNextMarks ? nextMarks : authoritativeMarks;
   const authoredMarks = extractAuthoredMarksFromDoc(parsedNext.doc as ProseMirrorNode, parser.schema as Schema);
   const effectiveNextMarks = synchronizeAuthoredMarks(nextMarksBase, authoredMarks);
-  const authoritativeNextMarkdown = shouldPreserveRichMarkdownSnapshot(sanitizedMarkdown)
-    ? normalizeStoredMarkdownSnapshot(sanitizedMarkdown)
-    : serializedNextMarkdown;
+  // marksOnly must keep the durable Yjs markdown text byte-for-byte. Base markdown
+  // from fragment projection can gain a trailing newline the Y.Text('markdown')
+  // never receives; marksOnly skips applyYTextDiff, so preview would 409
+  // comment/suggestion mark writes (suggestion-anchor-validation).
+  const durableYjsMarkdown = stripEphemeralCollabSpans(ydoc.getText('markdown').toString());
+  const authoritativeNextMarkdown = args.marksOnly === true
+    ? (durableYjsMarkdown || sanitizedMarkdown)
+    : shouldPreserveRichMarkdownSnapshot(sanitizedMarkdown)
+      ? normalizeStoredMarkdownSnapshot(sanitizedMarkdown)
+      : serializedNextMarkdown;
 
   try {
     if (liveRequired && currentMutationBase.source !== 'live_yjs') {

@@ -1373,7 +1373,8 @@ async function persistMarks(slug: string, marks: Record<string, StoredMark>, act
     });
   }
 
-  if (hasPotentiallyLiveCollabDoc(slug)) {
+  // Cold loadedDocs from a prior server mutation is not a live room.
+  if (hasLocalLiveCollabDoc(slug)) {
     return {
       status: 503,
       body: {
@@ -1837,7 +1838,8 @@ async function updateSuggestionStatus(
     };
   }
 
-  if (status !== 'rejected' && hasPotentiallyLiveCollabDoc(slug)) {
+  // Cold loadedDocs from a prior server mutation is not a live room.
+  if (status !== 'rejected' && hasLocalLiveCollabDoc(slug)) {
     return {
       status: 503,
       body: {
