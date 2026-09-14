@@ -24,7 +24,7 @@ export class PostgresStore {
  }
  async init() {
   const sql=await readFile(new URL('./schema/academy.sql',import.meta.url),'utf8');
-  const migration=`3:${createHash('sha256').update(sql).digest('hex')}`,previousMigration='2:3fa9bb87a5cfb8efe24eddc2f7fa94ff0657c0d711f5f9e19e41c6f91b12f3d2';
+  const migration=`3:${createHash('sha256').update(sql).digest('hex')}`,previousMigrations=['2:3fa9bb87a5cfb8efe24eddc2f7fa94ff0657c0d711f5f9e19e41c6f91b12f3d2','1:cfd75de0661902abf5fd6d4b2fe2984d7e9228cc111392e96686ed29d228b3e1'];
   await this.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',[`academy-schema:${this.schema}`]);
    const existing=await client.query('SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname=$1',[this.schema]);
@@ -37,7 +37,7 @@ export class PostgresStore {
     `,[this.schema]);
     if(relations.rows.some(row=>row.relname==='system_metadata')){
      const applied=await client.query('SELECT value FROM system_metadata WHERE key=$1',['academy_schema_migration']);
-     if(applied.rowCount){if(applied.rows[0].value===migration)return;if(applied.rows[0].value!==previousMigration)throw new Error('Academy schema migration version or checksum differs; apply an explicit offline migration before startup');upgrade=true;}
+     if(applied.rowCount){if(applied.rows[0].value===migration)return;if(!previousMigrations.includes(applied.rows[0].value))throw new Error('Academy schema migration version or checksum differs; apply an explicit offline migration before startup');upgrade=true;}
     }
     if(relations.rowCount&&!upgrade)throw new Error('Academy schema is unversioned; an explicit offline migration is required before startup');
    }else await client.query(`CREATE SCHEMA "${this.schema}"`);
