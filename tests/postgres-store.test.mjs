@@ -16,7 +16,7 @@ test('Postgres Academy state survives independent concurrent instances', {skip:!
  try {
   await one.init();
   const migration=(await pool.query(`SELECT value FROM "${schema}".system_metadata WHERE key='academy_schema_migration'`)).rows[0]?.value;
-  assert.match(migration,/^1:[a-f0-9]{64}$/);
+  assert.match(migration,/^2:[a-f0-9]{64}$/);
   await two.init();
   const room=await one.create('Concurrency',{slug:'test-document',editor:'test-editor'});
   const joined=await Promise.allSettled(Array.from({length:8},(_,i)=>(i%2?one:two).join(room.code,`Participant ${i}`)));
@@ -97,8 +97,13 @@ test('Academy schema migration fails closed for changed or unversioned state', {
   await assert.rejects(two.init(),/version or checksum differs/);
   await pool.query(`DELETE FROM "${schema}".system_metadata WHERE key='academy_schema_migration'`);
   await assert.rejects(two.init(),/unversioned.*offline migration/);
-  await pool.query(`INSERT INTO "${schema}".system_metadata (key,value,updated_at) VALUES ('academy_schema_migration',$1,$2)`,[original,new Date().toISOString()]);
+  await pool.query(`DROP TABLE "${schema}".facilitator_sessions`);
+  await pool.query(`ALTER TABLE "${schema}".sessions DROP COLUMN display_name`);
+  await pool.query(`INSERT INTO "${schema}".system_metadata (key,value,updated_at) VALUES ('academy_schema_migration',$1,$2)`,['1:cfd75de0661902abf5fd6d4b2fe2984d7e9228cc111392e96686ed29d228b3e1',new Date().toISOString()]);
   await two.init();
+  assert.equal((await pool.query(`SELECT value FROM "${schema}".system_metadata WHERE key='academy_schema_migration'`)).rows[0].value,original);
+  assert.equal((await pool.query(`SELECT 1 FROM "${schema}".facilitator_sessions`)).rowCount,0);
+  assert.equal((await pool.query(`SELECT display_name FROM "${schema}".sessions LIMIT 1`)).rowCount,0);
  } finally {
   await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   await pool.end();

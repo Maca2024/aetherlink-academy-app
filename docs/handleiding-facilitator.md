@@ -2,11 +2,15 @@
 
 Stap voor stap door AetherLink Academy als facilitator. Alle labels komen letterlijk uit de applicatie.
 
+## Inloggen met Google
+
+Als "Inloggen met Google" op het aanmeldscherm staat, meld je aan met je Google Workspace-account. Een account van een toegestaan domein opent automatisch "Start een squad" en toont "Ingelogd als" met je naam en e-mailadres. Gebruik "Uitloggen" om alleen de facilitator-login te beëindigen. De facilitator-startsleutel hieronder blijft beschikbaar als break-glass fallback als Google-login niet is geconfigureerd of tijdelijk niet werkt.
+
 ## Voorbereiding
 
 1. Open de gedeployde applicatie in een browser.
    Gebruik bijvoorbeeld https://aetherlink-academy-app.vercel.app.
-2. Vraag de startsleutel uit de serveromgeving op.
+2. Vraag de startsleutel uit de serveromgeving alleen op als je de break-glass fallback nodig hebt.
    De waarde staat lokaal in `.data/host-key` of in de serveromgeving.
    Print of deel de waarde nooit.
 3. Gebruik Node 24 en pnpm als je de applicatie lokaal beheert.
@@ -18,8 +22,8 @@ Stap voor stap door AetherLink Academy als facilitator. Alle labels komen letter
    De knop opent de weergave "Start een squad".
 2. Vul de squadnaam in bij "Squadnaam".
    De placeholder is "Squad Orion".
-3. Vul de startsleutel in bij "Facilitator-startsleutel".
-   De placeholder is "Lokale startsleutel".
+3. Ben je niet met Google ingelogd, vul dan de fallback in bij "Facilitator-startsleutel".
+   De placeholder is "Lokale startsleutel". Voor een ingelogde facilitator is dit veld verborgen.
 4. Klik op "Maak squad".
    Je komt in "Squad-room" terecht.
 5. Controleer de lege roster.
@@ -36,13 +40,13 @@ Stap voor stap door AetherLink Academy als facilitator. Alle labels komen letter
 ## Meerdere squads en facilitatoren
 
 1. Kies op het aanmeldscherm "Facilitator-overzicht".
-   Deze weergave vraagt alleen om de facilitator-startsleutel.
-2. Vul de startsleutel in en klik op "Toon overzicht".
+   Deze weergave gebruikt je Google-login of vraagt om de facilitator-startsleutel als fallback.
+2. Vul zo nodig de startsleutel in en klik op "Toon overzicht".
    Je ziet alle aangemaakte squads, hun kamercode, ronde, timer, roster en bewijsstatus.
 3. Kies bij de gewenste squad "Open als facilitator".
    Je komt in die "Squad-room" terecht zonder de bestaande facilitator-sessie te vervangen.
-4. Gebruik dezelfde facilitator-startsleutel voor extra begeleiding.
-   Meerdere facilitatoren kunnen met dezelfde facilitator-startsleutel aan dezelfde squad attachen.
+4. Gebruik voor extra begeleiding een eigen toegestane Google-login of dezelfde facilitator-startsleutel als fallback.
+   Meerdere facilitatoren kunnen aan dezelfde squad attachen.
 
 ## Ronde starten, pauzeren, volgende fase en driver roteren
 
