@@ -11,8 +11,8 @@ const same=(left,right)=>{const a=Buffer.from(String(left||'')),b=Buffer.from(St
 export function signLoginState(obj,secret){const payload=encoded(JSON.stringify(obj));return `${payload}.${createHmac('sha256',secret).update(payload).digest('base64url')}`;}
 export function readLoginState(value,secret){
  const [payload,signature,...rest]=String(value||'').split('.');
- if(!payload||!signature||rest.length||!same(signature,createHmac('sha256',secret).update(payload).digest('base64url')))throw failure('state');
- try{return decoded(payload);}catch{throw failure('state');}
+ if(!payload||!signature||rest.length||!same(signature,createHmac('sha256',secret).update(payload).digest('base64url')))throw Object.assign(failure('state'),{reason:'bad-signature'});
+ try{return decoded(payload);}catch{throw Object.assign(failure('state'),{reason:'bad-signature'});}
 }
 
 export function createGoogleSso({clientId,clientSecret,allowedDomains,publicUrl,fetchImpl=fetch}){
@@ -63,6 +63,7 @@ export function createGoogleSso({clientId,clientSecret,allowedDomains,publicUrl,
   const tokens=await json(config.token_endpoint,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body},'token');
   if(typeof tokens.id_token!=='string')throw failure('token');return verifyIdToken(tokens.id_token,{nonce});
  }
+ // Server-side state alone allows a login-CSRF (a victim can end up signed in as an attacker's Google identity); impact is bounded because createdBy records the true identity and only allowlisted Workspace domains can authenticate at all, and the cookie binding above still applies whenever the cookie survives the round trip.
  async function handleCallback(query,loginState){
   if(!loginState||loginState.expiresAt<Date.now()||typeof query?.state!=='string'||!same(query.state,loginState.state))throw failure('state');
   return exchangeAndVerify({code:query?.code,codeVerifier:loginState.codeVerifier,nonce:loginState.nonce});

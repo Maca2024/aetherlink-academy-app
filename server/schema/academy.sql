@@ -28,6 +28,13 @@ CREATE TABLE IF NOT EXISTS facilitator_sessions (
  expires_at bigint NOT NULL
 );
 CREATE INDEX IF NOT EXISTS facilitator_sessions_expiry ON facilitator_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS login_states (
+ state_hash text PRIMARY KEY,
+ nonce text NOT NULL,
+ code_verifier text NOT NULL,
+ expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_states_expiry ON login_states(expires_at);
 CREATE TABLE IF NOT EXISTS requests (
  room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
  person_id text NOT NULL,
