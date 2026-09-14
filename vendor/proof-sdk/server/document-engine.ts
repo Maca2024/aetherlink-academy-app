@@ -46,8 +46,10 @@ import {
 import {
   finalizeSuggestionThroughRehydration,
   type ProofMarkRehydrationFailure,
+  type ProofMarkRehydrationSuccess,
 } from './proof-mark-rehydration.js';
 import { stripAllProofSpanTags } from './proof-span-strip.js';
+import { CANONICAL_CHANGE_INSTANCE_ID, publishCanonicalChange } from './shared-redis.js';
 import {
   recordEditAnchorAmbiguous,
   recordEditAnchorNotFound,
@@ -325,6 +327,66 @@ function parseMarks(raw: string): Record<string, StoredMark> {
   } catch {
     return {};
   }
+}
+
+async function publishCommittedCanonicalChange(slug: string): Promise<void> {
+  const document = await getDocumentBySlug(slug);
+  if (!document) return;
+  await publishCanonicalChange({
+    slug,
+    epoch: typeof document.access_epoch === 'number' ? document.access_epoch : null,
+    version: document.y_state_version,
+    instanceId: CANONICAL_CHANGE_INSTANCE_ID,
+    pid: process.pid,
+  });
+}
+
+export async function retrySuggestionAcceptFromPersistedState<T extends {
+  markdown: string;
+  marks: string;
+  yjs_source?: CanonicalReadableDocument['yjs_source'];
+}>(args: {
+  slug: string;
+  markId: string;
+  sourceDocument: T;
+  initialFailure: ProofMarkRehydrationFailure;
+  readPersistedDocument: (slug: string) => Promise<T | null | undefined>;
+  finalizeSuggestion?: typeof finalizeSuggestionThroughRehydration;
+}): Promise<
+  | { ok: true; document: T; result: ProofMarkRehydrationSuccess }
+  | { ok: false; response: EngineExecutionResult }
+  | null
+> {
+  if (
+    args.sourceDocument.yjs_source !== 'live'
+    || (args.initialFailure.code !== 'REQUIRED_MARKS_MISSING' && args.initialFailure.code !== 'MARK_NOT_HYDRATED')
+  ) {
+    return null;
+  }
+  const persistedDocument = await args.readPersistedDocument(args.slug);
+  if (!persistedDocument) {
+    return {
+      ok: false,
+      response: toStructuredMutationFailureResult(args.initialFailure, 'Suggestion anchor quote not found in document'),
+    };
+  }
+  console.warn('[collab] suggestion accept retried from persisted state', {
+    slug: args.slug,
+    markId: args.markId,
+    code: args.initialFailure.code,
+  });
+  const retryResult = await (args.finalizeSuggestion ?? finalizeSuggestionThroughRehydration)({
+    markdown: persistedDocument.markdown,
+    marks: parseMarks(persistedDocument.marks),
+    markId: args.markId,
+    action: 'accept',
+  });
+  return retryResult.ok
+    ? { ok: true, document: persistedDocument, result: retryResult }
+    : {
+      ok: false,
+      response: toStructuredMutationFailureResult(args.initialFailure, 'Suggestion anchor quote not found in document'),
+    };
 }
 
 function normalizeQuote(value: unknown): string {
@@ -1342,6 +1404,7 @@ async function persistMarks(slug: string, marks: Record<string, StoredMark>, act
   if (!ok) {
     return { status: 500, body: { success: false, error: 'Failed to update marks' } };
   }
+  await publishCommittedCanonicalChange(slug);
   const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
   (await refreshSnapshotForSlug(slug));
   const doc = (await getDocumentBySlug(slug));
@@ -1393,6 +1456,7 @@ async function persistMarksWithAuthoritativeSync(
       syncFailureReason === 'fragment_unhealthy_marks_only'
       && await preserveMarksOnlyWriteIfAuthoritativeYjsMatches(slug, nextMarks as unknown as Record<string, unknown>)
     ) {
+      await publishCommittedCanonicalChange(slug);
       const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
       (await refreshSnapshotForSlug(slug));
       const doc = (await getDocumentBySlug(slug));
@@ -1452,6 +1516,7 @@ async function persistMarksWithAuthoritativeSync(
     };
   }
 
+  await publishCommittedCanonicalChange(slug);
   const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
   (await refreshSnapshotForSlug(slug));
   const doc = (await getDocumentBySlug(slug));
@@ -2331,12 +2396,30 @@ async function updateSuggestionStatusAsync(
     };
   }
 
-  const structuredResult = await finalizeSuggestionThroughRehydration({
+  let mutationDocument = doc;
+  let structuredResult = await finalizeSuggestionThroughRehydration({
     markdown: doc.markdown,
     marks: marksForRehydration,
     markId,
     action: status === 'accepted' ? 'accept' : 'reject',
   });
+  if (!structuredResult.ok && status === 'accepted') {
+    const retry = await retrySuggestionAcceptFromPersistedState({
+      slug,
+      markId,
+      sourceDocument: doc,
+      initialFailure: structuredResult,
+      readPersistedDocument: async (documentSlug) => (
+        (await getDocumentBySlug(documentSlug)) as MutationReadyDocument | null
+      ),
+    });
+    if (retry?.ok) {
+      mutationDocument = retry.document;
+      structuredResult = retry.result;
+    } else if (retry) {
+      return retry.response;
+    }
+  }
   if (!structuredResult.ok) {
     if (
       status === 'rejected'
@@ -2410,7 +2493,7 @@ async function updateSuggestionStatusAsync(
     nextMarkdown: structuredResult.markdown,
     nextMarks: structuredResult.marks as unknown as Record<string, unknown>,
     source: `engine:${status}:${actor}`,
-    ...buildCanonicalMutationBaseArgs(doc, context),
+    ...buildCanonicalMutationBaseArgs(mutationDocument, context),
     strictLiveDoc: true,
     guardPathologicalGrowth: true,
   });

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as scheduleTimeout, setInterval as scheduleInterval, setImmediate as scheduleImmediate } from 'node:timers';
-import { createSharedRedisExtensions } from './shared-redis.js';
+import { CANONICAL_CHANGE_INSTANCE_ID, createSharedRedisExtensions, subscribeToCanonicalChanges } from './shared-redis.js';
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
 import type { Server as HttpServer } from 'http';
 import * as Y from 'yjs';
@@ -19,7 +19,7 @@ import { stripProofSpanTags } from './proof-span-strip.js';
 import { restoreStandaloneBlankParagraphLines } from '../src/editor/explicit-blank-paragraphs.js';
 import { normalizeAgentScopedId } from '../src/shared/agent-identity.js';
 import { traceServerIncident, toErrorTraceData, type IncidentTraceLevel } from './incident-tracing.js';
-import { getActiveCollabClientBreakdown, type ActiveCollabClientBreakdown } from './ws.js';
+import { closeCollabRoomConnections, getActiveCollabClientBreakdown, hasCollabRoomConnections, type ActiveCollabClientBreakdown } from './ws.js';
 import { analyzeRepeatedStructureDelta, summarizeDocumentIntegrity } from './document-integrity.js';
 function setTimeout(callback: (...args: any[]) => void, delay?: number, ...args: any[]): NodeJS.Timeout {
     return runOutsideDatabaseTransaction(() => scheduleTimeout(callback, delay, ...args));
@@ -8938,26 +8938,26 @@ function evictStaleLocalStateForAccessEpoch(slug: string, accessEpoch: number): 
         // ignore
     }
 }
-function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string | null, yStateVersion: number): void {
+function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string | null, yStateVersion: number, force = false, closeHocuspocusConnections = true): void {
     const loadedMeta = loadedDocDbMeta.get(slug);
-    if (!loadedMeta)
+    if (!loadedMeta && !force)
         return;
-    const updatedAtMatches = updatedAt === null || loadedMeta.updatedAt === updatedAt;
-    if (updatedAtMatches && loadedMeta.yStateVersion === yStateVersion)
+    const updatedAtMatches = updatedAt === null || loadedMeta?.updatedAt === updatedAt;
+    if (!force && updatedAtMatches && loadedMeta?.yStateVersion === yStateVersion)
         return;
     const nextPersistGeneration = cancelPendingPersistWork(slug, { advanceGeneration: true });
     console.warn('[collab] evicting stale in-memory doc for persisted version bump', {
         slug,
-        loadedUpdatedAt: loadedMeta.updatedAt,
+        loadedUpdatedAt: loadedMeta?.updatedAt ?? null,
         currentUpdatedAt: updatedAt,
-        loadedYStateVersion: loadedMeta.yStateVersion,
+        loadedYStateVersion: loadedMeta?.yStateVersion ?? null,
         currentYStateVersion: yStateVersion,
     });
     evictLocalDocState(slug);
     persistGeneration.set(slug, nextPersistGeneration);
     const instance = hocuspocusInstance as any;
     dropHocuspocusDocumentReference(slug);
-    if (typeof instance?.closeConnections === 'function') {
+    if (closeHocuspocusConnections && typeof instance?.closeConnections === 'function') {
         try {
             instance.closeConnections(slug);
         }
@@ -8972,6 +8972,40 @@ function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string
         // ignore
     }
 }
+subscribeToCanonicalChanges(async (message) => {
+    if (message.instanceId === CANONICAL_CHANGE_INSTANCE_ID)
+        return;
+    const instance = hocuspocusInstance as any;
+    const loadedHere = loadedDocs.has(message.slug)
+        || Boolean(instance?.documents?.has?.(message.slug))
+        || hasCollabRoomConnections(message.slug);
+    if (!loadedHere) {
+        console.log('[collab] canonical change received', {
+            slug: message.slug,
+            pid: process.pid,
+            fromInstanceId: message.instanceId,
+            fromPid: message.pid,
+            action: 'ignored-not-loaded',
+        });
+        return;
+    }
+    const row = await getDocumentBySlug(message.slug);
+    evictStaleLocalStateForPersistedVersion(
+        message.slug,
+        row?.updated_at ?? null,
+        message.version,
+        true,
+        false,
+    );
+    closeCollabRoomConnections(message.slug);
+    console.log('[collab] canonical change received', {
+        slug: message.slug,
+        pid: process.pid,
+        fromInstanceId: message.instanceId,
+        fromPid: message.pid,
+        action: 'closed-connections',
+    });
+});
 async function reconcileStaleProjectionsOnStartup(): Promise<void> {
     const startedAt = Date.now();
     const limit = parsePositiveInt(process.env.COLLAB_STARTUP_RECONCILE_LIMIT, DEFAULT_STARTUP_STALE_PROJECTION_RECONCILE_LIMIT);

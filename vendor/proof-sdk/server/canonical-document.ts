@@ -69,6 +69,7 @@ import { recordProjectionRepair } from './metrics.js';
 import { isHostedRewriteEnvironment } from './rewrite-policy.js';
 import { refreshSnapshotForSlug } from './snapshot.js';
 import { pauseDocumentAndPropagate } from './share-state.js';
+import { CANONICAL_CHANGE_INSTANCE_ID, publishCanonicalChange } from './shared-redis.js';
 import { getActiveCollabClientBreakdown, getActiveCollabClientCount } from './ws.js';
 import { extractMarks } from '../src/formats/marks.js';
 import { restoreStandaloneBlankParagraphLines } from '../src/editor/explicit-blank-paragraphs.js';
@@ -1221,6 +1222,14 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
     if (!updated) {
       throw new Error('UPDATED_DOCUMENT_MISSING');
     }
+
+    await publishCanonicalChange({
+      slug: args.slug,
+      epoch: typeof updated.access_epoch === 'number' ? updated.access_epoch : null,
+      version: updated.y_state_version,
+      instanceId: CANONICAL_CHANGE_INSTANCE_ID,
+      pid: process.pid,
+    });
 
     await registerCanonicalYDocPersistence(args.slug, ydoc, {
       updatedAt: updated.updated_at,

@@ -71,6 +71,7 @@ interface PendingBridgeRequest {
 
 // Map of slug -> Set of connected clients
 const rooms = new Map<string, Set<Client>>();
+const collabRooms = new Map<string, Set<WebSocket>>();
 const pendingBridgeRequests = new Map<string, PendingBridgeRequest>();
 const ALLOWED_BROADCAST_TYPES = new Set(['cursor.update', 'selection.update']);
 
@@ -195,6 +196,7 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
     const isCollabConnection = url.searchParams.get('collab') === '1' || url.searchParams.has('role');
     const collabToken = url.searchParams.get('token') || extractCollabTokenFromHeaders(req.headers);
     const slug = url.searchParams.get('slug');
+    let collabRoomSlug = slug;
     let bridgeClientId: string | null = null;
 
     ws.on('error', (error) => {
@@ -249,6 +251,7 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
           ws.close(4401, 'Invalid or expired collab session token');
           return;
         }
+        collabRoomSlug = claims.slug;
         if (slug && slug !== claims.slug) {
           ws.close(4401, 'Collab token slug mismatch');
           return;
@@ -274,6 +277,15 @@ async function acceptConnection(ws: WebSocket, req: IncomingMessage): Promise<vo
       }
       try {
         if (ws.readyState !== WebSocket.OPEN) return;
+        if (collabRoomSlug) {
+          if (!collabRooms.has(collabRoomSlug)) collabRooms.set(collabRoomSlug, new Set());
+          collabRooms.get(collabRoomSlug)!.add(ws);
+          ws.once('close', () => {
+            const room = collabRooms.get(collabRoomSlug!);
+            room?.delete(ws);
+            if (room?.size === 0) collabRooms.delete(collabRoomSlug!);
+          });
+        }
         handleCollabWebSocketConnection(ws, req);
       } catch {
         try { ws.close(1011, 'Collab runtime failed'); } catch { /* ignore */ }
@@ -561,6 +573,22 @@ export function closeRoom(slug: string): void {
     client.ws.close(4001, 'Document unshared');
   }
   rooms.delete(slug);
+}
+
+export function hasCollabRoomConnections(slug: string): boolean {
+  return (collabRooms.get(slug)?.size ?? 0) > 0;
+}
+
+export function closeCollabRoomConnections(slug: string): number {
+  const room = collabRooms.get(slug);
+  if (!room) return 0;
+  let closed = 0;
+  for (const socket of room) {
+    if (socket.readyState !== WebSocket.OPEN) continue;
+    socket.close(1012, 'Canonical document changed');
+    closed += 1;
+  }
+  return closed;
 }
 
 export function getRoomSize(slug: string): number {
