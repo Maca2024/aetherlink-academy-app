@@ -34,6 +34,7 @@ import {
   getRecentCollabSessionLeaseCount,
   getLoadedCollabFragmentTextHash,
   getCollabRuntime,
+  hasLocalLiveCollabDoc,
   invalidateLoadedCollabDocumentAndWait,
   isIntegrityWarningQuarantineReason,
   isValidMutationBaseToken,
@@ -83,9 +84,10 @@ type PersistedCanonicalState = {
 
 type CanonicalMutationArgs = {
   slug: string;
-  nextMarkdown: string;
+  nextMarkdown?: string;
   nextMarks: Record<string, unknown>;
   source: string;
+  marksOnly?: boolean;
   baseToken?: string | null;
   baseRevision?: number | null;
   baseUpdatedAt?: string | null;
@@ -797,7 +799,7 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
   }
 
   const extractedInput = extractMarks(stripEphemeralCollabSpans(args.nextMarkdown ?? ''));
-  const sanitizedMarkdown = stripEphemeralCollabSpans(extractedInput.content ?? '');
+  const requestedMarkdown = stripEphemeralCollabSpans(extractedInput.content ?? '');
   const hasExplicitNextMarks = args.nextMarks !== undefined;
   const nextMarks = hasExplicitNextMarks ? args.nextMarks : {};
   const collabRuntimeEnabled = getCollabRuntime().enabled;
@@ -815,6 +817,12 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
   }
   let activeCollabClients = collabClientBreakdown.total;
   if (strictLiveDocRequested && activeCollabClients > 0 && !collabRuntimeEnabled) {
+    console.warn('[collab] live doc unavailable', {
+      slug: args.slug,
+      site: 'runtime-disabled',
+      localLive: hasLocalLiveCollabDoc(args.slug),
+      activeCollabClients,
+    });
     return {
       ok: false,
       status: 409,
@@ -828,6 +836,12 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
     && collabClientBreakdown.total > 0
     && collabClientBreakdown.exactEpochCount === 0;
   if (strictLiveDocRequested && hostedRemoteLiveLease) {
+    console.warn('[collab] live doc unavailable', {
+      slug: args.slug,
+      site: 'hosted-remote-live-lease',
+      localLive: hasLocalLiveCollabDoc(args.slug),
+      activeCollabClients,
+    });
     return {
       ok: false,
       status: 409,
@@ -846,9 +860,6 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
     );
   }
   let liveRequired = strictLiveDocRequested && activeCollabClients > 0;
-  const shouldBumpAccessEpoch = collabRuntimeEnabled
-    && strictLiveDocRequested
-    && activeCollabClients === 0;
   let initialBaseResolution = await resolveAuthoritativeMutationBase(args.slug, {
     liveRequired,
   });
@@ -870,6 +881,14 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
         retryWithState: `/api/agent/${args.slug}/state`,
       };
     }
+    if (initialBaseResolution.reason !== 'missing_document') {
+      console.warn('[collab] live doc unavailable', {
+        slug: args.slug,
+        site: 'initial-base-resolution',
+        localLive: hasLocalLiveCollabDoc(args.slug),
+        activeCollabClients,
+      });
+    }
     return initialBaseResolution.reason === 'missing_document'
       ? { ok: false, status: 404, code: 'NOT_FOUND', error: 'Document not found' }
       : {
@@ -889,6 +908,9 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
       retryWithState: `/api/agent/${args.slug}/state`,
     };
   }
+  const sanitizedMarkdown = args.marksOnly === true
+    ? stripEphemeralCollabSpans(initialBaseResolution.base.markdown)
+    : requestedMarkdown;
   let handle = await loadCanonicalYDoc(args.slug, { liveRequired });
   if (!handle && liveRequired && hostedRuntime) {
     collabClientBreakdown = await waitForHostedLiveLeaseMaterialization(args.slug);
@@ -897,6 +919,12 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
     handle = await loadCanonicalYDoc(args.slug, { liveRequired });
   }
   if (!handle) {
+    console.warn('[collab] live doc unavailable', {
+      slug: args.slug,
+      site: 'load-canonical-ydoc',
+      localLive: hasLocalLiveCollabDoc(args.slug),
+      activeCollabClients,
+    });
     return {
       ok: false,
       status: 409,
@@ -956,6 +984,14 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
           error: 'Persisted collaborative state is corrupt; document is quarantined until repair',
           retryWithState: `/api/agent/${args.slug}/state`,
         };
+      }
+      if (currentBaseResolution.reason !== 'missing_document') {
+        console.warn('[collab] live doc unavailable', {
+          slug: args.slug,
+          site: 'revalidate-live-base',
+          localLive: hasLocalLiveCollabDoc(args.slug),
+          activeCollabClients,
+        });
       }
       return currentBaseResolution.reason === 'missing_document'
         ? { ok: false, status: 404, code: 'NOT_FOUND', error: 'Document not found' }
@@ -1108,8 +1144,10 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
     const persistedCandidateDoc = cloneYDocWithHistory(persistedState.ydoc);
     Y.applyUpdate(persistedCandidateDoc, Y.encodeStateAsUpdate(ydoc));
     persistedCandidateDoc.transact(() => {
-      replaceYXmlFragment(persistedCandidateDoc.getXmlFragment('prosemirror'), parsedNext.doc);
-      applyYTextDiff(persistedCandidateDoc.getText('markdown'), authoritativeNextMarkdown);
+      if (args.marksOnly !== true) {
+        replaceYXmlFragment(persistedCandidateDoc.getXmlFragment('prosemirror'), parsedNext.doc);
+        applyYTextDiff(persistedCandidateDoc.getText('markdown'), authoritativeNextMarkdown);
+      }
       applyMarksMapDiff(persistedCandidateDoc.getMap('marks'), effectiveNextMarks);
     }, canonicalTransactionOrigin(args.source));
 
@@ -1205,13 +1243,11 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
       }
 
       const marksJson = JSON.stringify(effectiveNextMarks);
-      const accessEpochDelta = shouldBumpAccessEpoch ? 1 : 0;
       const result = await getDb().prepare(`
         UPDATE documents
-        SET markdown = $1, marks = $2, updated_at = $3, revision = revision + 1, y_state_version = $4,
-            access_epoch = access_epoch + $5
-        WHERE slug = $6 AND revision = $7 AND share_state IN ('ACTIVE', 'PAUSED')
-      `).run(authoritativeNextMarkdown, marksJson, now, nextYStateVersion, accessEpochDelta, args.slug, doc.revision);
+        SET markdown = $1, marks = $2, updated_at = $3, revision = revision + 1, y_state_version = $4
+        WHERE slug = $5 AND revision = $6 AND share_state IN ('ACTIVE', 'PAUSED')
+      `).run(authoritativeNextMarkdown, marksJson, now, nextYStateVersion, args.slug, doc.revision);
       if (result.changes === 0) {
         throw new Error('STALE_BASE');
       }
@@ -1566,6 +1602,12 @@ export async function repairCanonicalProjection(
     };
   }
   if (!handle) {
+    console.warn('[collab] live doc unavailable', {
+      slug,
+      site: 'repair-canonical-projection',
+      localLive: hasLocalLiveCollabDoc(slug),
+      activeCollabClients: await getActiveCollabClientCount(slug),
+    });
     return { ok: false, status: 409, code: 'LIVE_DOC_UNAVAILABLE', error: 'Canonical document is unavailable' };
   }
 
@@ -1665,6 +1707,12 @@ export async function cloneFromCanonical(slug: string, actor: string = 'system')
   const sourceDoc = repair.document;
   const handle = await loadCanonicalYDoc(slug, { liveRequired: false });
   if (!handle) {
+    console.warn('[collab] live doc unavailable', {
+      slug,
+      site: 'clone-from-canonical',
+      localLive: hasLocalLiveCollabDoc(slug),
+      activeCollabClients: await getActiveCollabClientCount(slug),
+    });
     return {
       ok: false,
       status: 409,

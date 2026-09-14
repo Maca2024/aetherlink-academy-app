@@ -50,7 +50,15 @@ async function connect(base, token, slug) {
   const doc = new Y.Doc();
   const provider = new HocuspocusProvider({ websocketProvider: socket, name: slug, document: doc, token: session.token });
   let closed = false;
-  const client = { doc, provider, get closeEvents() { return closeEvents; }, close() { if (closed) return; closed = true; provider.destroy(); socket.destroy(); doc.destroy(); } };
+  const client = { doc, provider, get closeEvents() { return closeEvents; }, close() {
+    if (closed) return;
+    closed = true;
+    const connectingWebSocket = socket.webSocket?.readyState === WS.CONNECTING ? socket.webSocket : null;
+    provider.destroy();
+    if (connectingWebSocket) connectingWebSocket.once('close', () => socket.destroy());
+    else socket.destroy();
+    doc.destroy();
+  } };
   try { await until(() => provider.isSynced, 'real Proof client sync'); return client; }
   catch (error) { client.close(); throw error; }
 }
@@ -110,11 +118,27 @@ test('two real Academy/Proof processes converge through Redis and survive proces
     let markMap = one.doc.getMap('marks');
     const mcp = await request(bases[1], '/game/mcp-token', {}, a.token);
     const quote = 'Een verse lezer kan de juiste controle uitvoeren en de uitkomst uitleggen.';
-    async function reconnectProcessA(closeEventsBefore, label) {
-      await until(() => one.closeEvents > closeEventsBefore, label, 3000);
-      one.close();
-      one = await connect(bases[0], a.token, slug); clients.push(one);
-      markMap = one.doc.getMap('marks');
+    async function waitForProcessAConvergence(closeEventsBefore, label, check, timeout = 10000) {
+      const deadline = Date.now() + timeout;
+      let watchedClient = one;
+      let watchedCloseEvents = closeEventsBefore;
+      let closeObservedAt = null;
+      while (Date.now() < deadline) {
+        if (await check()) return;
+        if (watchedClient.closeEvents > watchedCloseEvents) {
+          closeObservedAt ??= Date.now();
+          if (Date.now() - closeObservedAt >= 3000) {
+            watchedClient.close();
+            one = await connect(bases[0], a.token, slug); clients.push(one);
+            markMap = one.doc.getMap('marks');
+            watchedClient = one;
+            watchedCloseEvents = one.closeEvents;
+            closeObservedAt = null;
+          }
+        }
+        await delay(100);
+      }
+      throw new Error(`Timed out: ${label}`);
     }
     async function suggestFromProcessB(content) {
       const closeEventsBefore = one.closeEvents;
@@ -125,8 +149,11 @@ test('two real Academy/Proof processes converge through Redis and survive proces
       }, mcp.token);
       const markId = Object.keys(suggestion.marks || {}).find(id => suggestion.marks[id]?.content === content);
       assert(markId, 'MCP suggestion response contains its pending mark');
-      await reconnectProcessA(closeEventsBefore, `process A socket closes for suggestion ${markId}`);
-      await until(() => markMap.has(markId), `process A receives suggestion ${markId}`, 3000);
+      await waitForProcessAConvergence(
+        closeEventsBefore,
+        `process A receives suggestion ${markId} in place or after fallback reconnect`,
+        () => markMap.has(markId),
+      );
       return markId;
     }
 
@@ -138,8 +165,11 @@ test('two real Academy/Proof processes converge through Redis and survive proces
       decision: 'reject',
       requestId: randomUUID(),
     }, host.token);
-    await reconnectProcessA(rejectionCloseEventsBefore, 'process A socket closes after cross-instance rejection');
-    await until(() => !markMap.has(rejectedId), 'process A removes rejected suggestion mark', 3000);
+    await waitForProcessAConvergence(
+      rejectionCloseEventsBefore,
+      'process A removes rejected suggestion mark in place or after fallback reconnect',
+      () => !markMap.has(rejectedId),
+    );
 
     const acceptedContent = 'Een verse lezer voert de gedistribueerde controle exact eenmaal uit.';
     const acceptedId = await suggestFromProcessB(acceptedContent);
@@ -149,9 +179,12 @@ test('two real Academy/Proof processes converge through Redis and survive proces
       decision: 'accept',
       requestId: randomUUID(),
     }, host.token);
-    await reconnectProcessA(acceptanceCloseEventsBefore, 'process A socket closes after cross-instance acceptance');
     const occurrences = (value, needle) => value.split(needle).length - 1;
-    await until(() => occurrences(fragment(one).toString(), acceptedContent) === 1, 'process A receives accepted content once', 3000);
+    await waitForProcessAConvergence(
+      acceptanceCloseEventsBefore,
+      'process A receives accepted content once in place or after fallback reconnect',
+      () => occurrences(fragment(one).toString(), acceptedContent) === 1,
+    );
     let processADocument;
     await until(async () => {
       processADocument = await request(bases[0], '/game/mcp/get_document', {}, mcp.token);

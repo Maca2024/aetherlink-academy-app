@@ -42,11 +42,11 @@ async function run(): Promise<void> {
     const updated = db.getDocumentBySlug(slug);
     assert(Boolean(updated), 'Expected document row after mutation');
     assert(
-      typeof updated?.access_epoch === 'number' && updated.access_epoch > created.access_epoch,
-      `Expected access_epoch to bump after strict live-doc mutation without active collab clients. before=${created.access_epoch} after=${updated?.access_epoch}`,
+      updated?.access_epoch === created.access_epoch,
+      `Expected a canonical content mutation to preserve access_epoch. before=${created.access_epoch} after=${updated?.access_epoch}`,
     );
 
-    console.log('✓ strict live-doc mutations bump access_epoch when no collab clients are connected');
+    console.log('✓ canonical content mutations preserve access_epoch when no collab clients are connected');
   } finally {
     await collab.stopCollabRuntime();
     for (const suffix of ['', '-wal', '-shm']) {

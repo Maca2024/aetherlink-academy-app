@@ -22,6 +22,7 @@ import {
   getLoadedCollabMarkdownForVerification,
   getLoadedCollabMarkdownFromFragment,
   getLoadedCollabFragmentTextHash,
+  hasLocalLiveCollabDoc,
   hasAgentPresenceInLoadedCollab,
   isCanonicalReadMutationReady,
   invalidateLoadedCollabDocument,
@@ -345,9 +346,8 @@ function hashCanonicalDocument(markdown: string, marks: Record<string, unknown> 
 }
 
 async function resolveRouteMutationBase(slug: string): Promise<AuthoritativeMutationBase | null> {
-  const activeCollabClients = (await getActiveCollabClientCount(slug));
   const resolved = await resolveAuthoritativeMutationBase(slug, {
-    liveRequired: activeCollabClients > 0,
+    liveRequired: hasLocalLiveCollabDoc(slug),
   });
   return resolved.ok ? resolved.base : null;
 }
@@ -1297,6 +1297,7 @@ function notifyCollabMutation(
       if (options?.verify) {
         const debugConvergence = (process.env.COLLAB_DEBUG_FRAGMENT_CONVERGENCE || '').trim() === '1';
         const activeCollabClients = (await getActiveCollabClientCount(slug));
+        const localLiveDoc = hasLocalLiveCollabDoc(slug);
         const finalizeVerification = async (attempt: {
           confirmed: boolean;
           reason?: string;
@@ -1336,7 +1337,7 @@ function notifyCollabMutation(
           }
 
           const authoritative = await verifyAuthoritativeMutationBaseStable(slug, targetMarkdown, targetMarks, {
-            liveRequired: activeCollabClients > 0,
+            liveRequired: options?.strictLiveDoc ? activeCollabClients > 0 : localLiveDoc,
             stabilityMs: options.stabilityMs,
             sampleMs: EDIT_COLLAB_STABILITY_SAMPLE_MS,
           });
@@ -1351,12 +1352,12 @@ function notifyCollabMutation(
             !confirmed
             && reason === 'no_live_doc'
             && !options?.strictLiveDoc
-            && activeCollabClients === 0
+            && !localLiveDoc
             && canonicalConfirmed
           ) {
             // Non-strict routes can accept authoritative readback even if there is no
-            // loaded live doc, as long as no viewers are connected and Yjs-backed state
-            // already matches the intended document.
+            // loaded live doc, as long as no viewers are connected on this instance and
+            // persisted Yjs-backed state already matches the intended document.
             confirmed = true;
           } else if (!canonicalConfirmed && authoritative.reason) {
             reason = authoritative.reason;
@@ -3505,7 +3506,7 @@ agentRoutes.post('/:slug/marks/accept', async (req: Request, res: Response) => {
         verify: true,
         source: 'marks.accept',
         stabilityMs: EDIT_COLLAB_STABILITY_MS,
-        strictLiveDoc: true,
+        strictLiveDoc: hasLocalLiveCollabDoc(slug),
         apply: false,
       },
     );

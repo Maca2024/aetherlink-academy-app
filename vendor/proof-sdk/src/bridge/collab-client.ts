@@ -19,6 +19,7 @@ type SyncStatusHandler = (status: CollabSyncStatus) => void;
 export type CollabTerminalCloseReason = 'unshared' | 'permission-denied' | null;
 type MarksHandler = (marks: Record<string, unknown>, deletedIds?: string[]) => void;
 type DocumentUpdatedHandler = () => void;
+type CanonicalDocumentResetHandler = () => void;
 
 type CollabLocalUser = { name: string; color: string };
 
@@ -37,6 +38,8 @@ const USER_COLOR_PALETTE = [
 
 const DURABLE_UPDATE_KEY_PREFIX = 'proof:collab:pending-updates:';
 const MAX_DURABLE_UPDATES = 200;
+const CANONICAL_DOCUMENT_CHANGED_CLOSE_CODE = 1012;
+const CANONICAL_DOCUMENT_CHANGED_CLOSE_REASON = 'Canonical document changed';
 
 const DURABLE_CLIENT_ID_SESSION_KEY = 'proof:collab:durable-client-id';
 
@@ -181,6 +184,8 @@ export class CollabClient {
   private presenceHandler: PresenceHandler | null = null;
   private syncStatusHandler: SyncStatusHandler | null = null;
   private documentUpdatedHandler: DocumentUpdatedHandler | null = null;
+  private canonicalDocumentResetHandler: CanonicalDocumentResetHandler | null = null;
+  private connectionGeneration = 0;
   private applyingLocalMarks = false;
   private hasSynced = false;
   private lastDisconnectAt: number | null = null;
@@ -228,6 +233,10 @@ export class CollabClient {
 
   onDocumentUpdated(handler: DocumentUpdatedHandler): void {
     this.documentUpdatedHandler = handler;
+  }
+
+  onCanonicalDocumentReset(handler: CanonicalDocumentResetHandler): void {
+    this.canonicalDocumentResetHandler = handler;
   }
 
   private emitSyncStatus(): void {
@@ -555,6 +564,7 @@ export class CollabClient {
       throw new Error(`Unsupported collab sync protocol: ${session.syncProtocol}`);
     }
 
+    const generation = ++this.connectionGeneration;
     this.disconnect();
     this.activeSession = { ...session };
     this.sessionRole = session.role;
@@ -611,11 +621,13 @@ export class CollabClient {
     }, transaction => transaction.origin === 'local-marks-sync' || this.applyingLocalMarks);
 
     provider.on('awarenessChange', (event: { states: Array<unknown> }) => {
+      if (generation !== this.connectionGeneration) return;
       if (!this.presenceHandler) return;
       this.presenceHandler(event.states.length);
     });
 
     provider.on('status', (event: { status: ConnectionStatus }) => {
+      if (generation !== this.connectionGeneration) return;
       this.connectionStatus = event.status;
       if (event.status === 'disconnected') {
         this.hasSynced = false;
@@ -648,6 +660,7 @@ export class CollabClient {
     });
 
     provider.on('stateless', (payload: unknown) => {
+      if (generation !== this.connectionGeneration) return;
       const message = this.decodeStatelessMessage(payload);
       if (!message) return;
       const type = message.type;
@@ -657,6 +670,7 @@ export class CollabClient {
     });
 
     provider.on('authenticationFailed', (event: { reason?: string }) => {
+      if (generation !== this.connectionGeneration) return;
       const reason = typeof event?.reason === 'string' ? event.reason : 'permission-denied';
       this.lastAuthenticationFailureReason = reason;
       this.connectionStatus = 'disconnected';
@@ -675,11 +689,23 @@ export class CollabClient {
       this.emitSyncStatus();
     });
 
-    provider.on('close', () => {
+    provider.on('close', ({ event }: { event?: { code?: number; reason?: string } }) => {
+      if (generation !== this.connectionGeneration) return;
+      if (
+        event?.code === CANONICAL_DOCUMENT_CHANGED_CLOSE_CODE
+        && event.reason === CANONICAL_DOCUMENT_CHANGED_CLOSE_REASON
+      ) {
+        provider.disconnect();
+        this.connectionGeneration += 1;
+        console.info(`[collab] Reloading document ${session.slug} because another instance changed it.`);
+        this.canonicalDocumentResetHandler?.();
+        return;
+      }
       this.emitSyncStatus();
     });
 
     provider.on('unsyncedChanges', (changes: unknown) => {
+      if (generation !== this.connectionGeneration) return;
       if (typeof changes === 'number' && Number.isFinite(changes)) {
         this.unsyncedChanges = Math.max(0, Math.floor(changes));
       } else {
@@ -693,6 +719,7 @@ export class CollabClient {
     });
 
     provider.on('synced', (event: { state?: boolean }) => {
+      if (generation !== this.connectionGeneration) return;
       const state = event?.state;
       this.hasSynced = state !== false;
       this.maybeClearDurableBuffer();

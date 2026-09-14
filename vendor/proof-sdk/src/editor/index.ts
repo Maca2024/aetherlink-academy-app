@@ -1553,6 +1553,10 @@ class ProofEditorImpl implements ProofEditor {
           if (this.collabConnectionStatus === 'connected' && this.collabIsSynced) return;
           void this.refreshCollabSessionAfterDocumentUpdated();
         });
+        collabClient.onCanonicalDocumentReset(() => {
+          if (!this.collabEnabled) return;
+          void this.refreshCollabSessionAfterDocumentUpdated();
+        });
         this.resetPendingCollabTemplateState(false);
         this.pendingCollabTemplateMarkdown = this.shouldAllowCollabTemplateSeed(collabSession.session)
           ? collabTemplateMarkdown

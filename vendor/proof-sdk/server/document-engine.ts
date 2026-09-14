@@ -8,7 +8,6 @@ import {
   shouldRejectMarkMutationByResolvedRevision,
   upsertMarkTombstone,
   updateDocumentAtomic,
-  updateMarks,
 } from './db-postgres.js';
 import { refreshSnapshotForSlug } from './snapshot.js';
 import {
@@ -16,12 +15,10 @@ import {
   getCanonicalReadableDocument as getAuthoritativeCanonicalReadableDocument,
   getCanonicalReadableDocumentSync,
   getLoadedCollabMarkdownFromFragment,
+  hasLocalLiveCollabDoc,
   hasPotentiallyLiveCollabDoc,
   invalidateLoadedCollabDocumentAndWait,
   isCanonicalReadMutationReady,
-  preserveMarksOnlyWriteIfAuthoritativeYjsMatches,
-  reportCanonicalSyncRecoveryFailure,
-  syncCanonicalDocumentStateToCollab,
   stripEphemeralCollabSpans,
   type CanonicalReadableDocument,
 } from './collab.js';
@@ -49,7 +46,6 @@ import {
   type ProofMarkRehydrationSuccess,
 } from './proof-mark-rehydration.js';
 import { stripAllProofSpanTags } from './proof-span-strip.js';
-import { CANONICAL_CHANGE_INSTANCE_ID, publishCanonicalChange } from './shared-redis.js';
 import {
   recordEditAnchorAmbiguous,
   recordEditAnchorNotFound,
@@ -329,18 +325,6 @@ function parseMarks(raw: string): Record<string, StoredMark> {
   }
 }
 
-async function publishCommittedCanonicalChange(slug: string): Promise<void> {
-  const document = await getDocumentBySlug(slug);
-  if (!document) return;
-  await publishCanonicalChange({
-    slug,
-    epoch: typeof document.access_epoch === 'number' ? document.access_epoch : null,
-    version: document.y_state_version,
-    instanceId: CANONICAL_CHANGE_INSTANCE_ID,
-    pid: process.pid,
-  });
-}
-
 export async function retrySuggestionAcceptFromPersistedState<T extends {
   markdown: string;
   marks: string;
@@ -358,8 +342,8 @@ export async function retrySuggestionAcceptFromPersistedState<T extends {
   | null
 > {
   if (
-    args.sourceDocument.yjs_source !== 'live'
-    || (args.initialFailure.code !== 'REQUIRED_MARKS_MISSING' && args.initialFailure.code !== 'MARK_NOT_HYDRATED')
+    args.initialFailure.code !== 'REQUIRED_MARKS_MISSING'
+    && args.initialFailure.code !== 'MARK_NOT_HYDRATED'
   ) {
     return null;
   }
@@ -1400,14 +1384,39 @@ async function persistMarks(slug: string, marks: Record<string, StoredMark>, act
     };
   }
 
-  const ok = (await updateMarks(slug, normalizedMarks as unknown as Record<string, unknown>));
-  if (!ok) {
-    return { status: 500, body: { success: false, error: 'Failed to update marks' } };
+  return persistCanonicalMarks(slug, normalizedMarks, actor, eventType, eventData, false);
+}
+
+async function persistCanonicalMarks(
+  slug: string,
+  marks: Record<string, StoredMark>,
+  actor: string,
+  eventType: string,
+  eventData: JsonRecord,
+  strictLiveDoc: boolean,
+): Promise<EngineExecutionResult> {
+  const mutation = await mutateCanonicalDocument({
+    slug,
+    nextMarks: marks as unknown as Record<string, unknown>,
+    source: `engine:${eventType}:${actor}`,
+    marksOnly: true,
+    strictLiveDoc,
+    guardPathologicalGrowth: true,
+  });
+  if (!mutation.ok) {
+    return {
+      status: mutation.status,
+      body: {
+        success: false,
+        code: mutation.code,
+        error: mutation.error,
+        ...(mutation.retryWithState ? { retryWithState: mutation.retryWithState } : {}),
+      },
+    };
   }
-  await publishCommittedCanonicalChange(slug);
+
   const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
   (await refreshSnapshotForSlug(slug));
-  const doc = (await getDocumentBySlug(slug));
   const markId = typeof eventData.markId === 'string' && eventData.markId.trim().length > 0
     ? eventData.markId.trim()
     : undefined;
@@ -1417,123 +1426,22 @@ async function persistMarks(slug: string, marks: Record<string, StoredMark>, act
       success: true,
       eventId,
       ...(markId ? { markId } : {}),
-      shareState: doc?.share_state ?? 'ACTIVE',
-      updatedAt: doc?.updated_at ?? new Date().toISOString(),
-      marks: normalizedMarks,
+      shareState: mutation.document.share_state,
+      updatedAt: mutation.document.updated_at,
+      marks,
     },
   };
 }
 
 async function persistMarksWithAuthoritativeSync(
   slug: string,
-  previousMarks: Record<string, StoredMark>,
+  _previousMarks: Record<string, StoredMark>,
   nextMarks: Record<string, StoredMark>,
   actor: string,
   eventType: string,
   eventData: JsonRecord,
 ): Promise<EngineExecutionResult> {
-  const ok = (await updateMarks(slug, nextMarks as unknown as Record<string, unknown>));
-  if (!ok) {
-    return { status: 500, body: { success: false, error: 'Failed to update marks' } };
-  }
-
-  let syncFailureReason: string | null = null;
-  try {
-    const syncResult = await syncCanonicalDocumentStateToCollab(slug, {
-      marks: nextMarks as unknown as Record<string, unknown>,
-      source: 'engine',
-    });
-    if (!syncResult.applied) {
-      syncFailureReason = syncResult.reason;
-    }
-  } catch (error) {
-    console.error('[document-engine] Failed to sync marks into canonical collab state:', { slug, error });
-    syncFailureReason = 'apply_failed';
-  }
-
-  if (syncFailureReason) {
-    if (
-      syncFailureReason === 'fragment_unhealthy_marks_only'
-      && await preserveMarksOnlyWriteIfAuthoritativeYjsMatches(slug, nextMarks as unknown as Record<string, unknown>)
-    ) {
-      await publishCommittedCanonicalChange(slug);
-      const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
-      (await refreshSnapshotForSlug(slug));
-      const doc = (await getDocumentBySlug(slug));
-      const markId = typeof eventData.markId === 'string' && eventData.markId.trim().length > 0
-        ? eventData.markId.trim()
-        : undefined;
-      return {
-        status: 200,
-        body: {
-          success: true,
-          eventId,
-          ...(markId ? { markId } : {}),
-          shareState: doc?.share_state ?? 'ACTIVE',
-          updatedAt: doc?.updated_at ?? new Date().toISOString(),
-          marks: nextMarks,
-        },
-      };
-    }
-    const rolledBack = (await updateMarks(slug, previousMarks as unknown as Record<string, unknown>));
-    if (!rolledBack) {
-      console.error('[document-engine] Failed to roll back marks after collab sync refusal', {
-        slug,
-        reason: syncFailureReason,
-      });
-      (await reportCanonicalSyncRecoveryFailure(slug, {
-        surface: 'document_engine',
-        route: eventType,
-        stage: 'rollback_failed',
-        reason: syncFailureReason,
-        rolledBack: false,
-      }));
-    }
-    try {
-      await invalidateLoadedCollabDocumentAndWait(slug);
-    } catch (error) {
-      console.error('[document-engine] Failed to fully invalidate collab state after marks sync refusal', {
-        slug,
-        reason: syncFailureReason,
-        error,
-      });
-      (await reportCanonicalSyncRecoveryFailure(slug, {
-        surface: 'document_engine',
-        route: eventType,
-        stage: 'invalidate_failed',
-        reason: syncFailureReason,
-        rolledBack,
-        error,
-      }));
-    }
-    return {
-      status: 503,
-      body: {
-        success: false,
-        code: 'COLLAB_SYNC_FAILED',
-        error: 'Failed to synchronize marks with collab state; retry with latest state',
-      },
-    };
-  }
-
-  await publishCommittedCanonicalChange(slug);
-  const eventId = (await addDocumentEvent(slug, eventType, eventData, actor));
-  (await refreshSnapshotForSlug(slug));
-  const doc = (await getDocumentBySlug(slug));
-  const markId = typeof eventData.markId === 'string' && eventData.markId.trim().length > 0
-    ? eventData.markId.trim()
-    : undefined;
-  return {
-    status: 200,
-    body: {
-      success: true,
-      eventId,
-      ...(markId ? { markId } : {}),
-      shareState: doc?.share_state ?? 'ACTIVE',
-      updatedAt: doc?.updated_at ?? new Date().toISOString(),
-      marks: nextMarks,
-    },
-  };
+  return persistCanonicalMarks(slug, nextMarks, actor, eventType, eventData, true);
 }
 
 async function persistMarksAsync(
@@ -1558,7 +1466,6 @@ async function persistMarksAsync(
   const liveFragmentMarkdown = await getLoadedCollabMarkdownFromFragment(slug);
   const currentRow = (await getDocumentBySlug(slug));
   const persistedMarkdown = stripEphemeralCollabSpans(currentRow?.markdown ?? '');
-  const authoritativeMarkdown = stripEphemeralCollabSpans(doc.markdown ?? '');
   const targetMarkdown = typeof liveFragmentMarkdown === 'string'
     ? liveFragmentMarkdown
     : (context?.mutationBase?.markdown ?? null);
@@ -1587,11 +1494,11 @@ async function persistMarksAsync(
 
   const mutation = await mutateCanonicalDocument({
     slug,
-    nextMarkdown: targetMarkdown ?? authoritativeMarkdown,
     nextMarks: normalizedMarks as unknown as Record<string, unknown>,
     source: `engine:${eventType}:${actor}`,
+    marksOnly: true,
     ...buildCanonicalMutationBaseArgs(doc, context),
-    strictLiveDoc: true,
+    strictLiveDoc: hasLocalLiveCollabDoc(slug),
     guardPathologicalGrowth: true,
   });
   if (!mutation.ok) {
@@ -2351,12 +2258,6 @@ async function updateSuggestionStatusAsync(
       const updated = (await getDocumentBySlug(slug));
       const resolvedRevision = typeof updated?.revision === 'number' ? updated.revision : (doc.revision + 1);
       (await upsertMarkTombstone(slug, markId, status, resolvedRevision));
-      if (status === 'rejected') {
-        if ((updated?.access_epoch ?? doc.access_epoch) === doc.access_epoch) {
-          (await bumpDocumentAccessEpoch(slug));
-        }
-        (await invalidateLoadedCollabDocumentAndWait(slug));
-      }
     }
     return result;
   }
@@ -2434,7 +2335,7 @@ async function updateSuggestionStatusAsync(
         nextMarks: nextMarks as unknown as Record<string, unknown>,
         source: `engine:${status}:${actor}:fallback`,
         baseRevision: doc.revision,
-        strictLiveDoc: true,
+        strictLiveDoc: hasLocalLiveCollabDoc(slug),
         guardPathologicalGrowth: true,
       });
       if (!mutation.ok) {
@@ -2467,10 +2368,6 @@ async function updateSuggestionStatusAsync(
           status,
         },
       };
-      if ((mutation.document.access_epoch ?? doc.access_epoch) === doc.access_epoch) {
-        (await bumpDocumentAccessEpoch(slug));
-      }
-      (await invalidateLoadedCollabDocumentAndWait(slug));
 
       return {
         status: 200,
@@ -2494,7 +2391,7 @@ async function updateSuggestionStatusAsync(
     nextMarks: structuredResult.marks as unknown as Record<string, unknown>,
     source: `engine:${status}:${actor}`,
     ...buildCanonicalMutationBaseArgs(mutationDocument, context),
-    strictLiveDoc: true,
+    strictLiveDoc: hasLocalLiveCollabDoc(slug),
     guardPathologicalGrowth: true,
   });
   if (!mutation.ok) {
@@ -2527,12 +2424,6 @@ async function updateSuggestionStatusAsync(
       status,
     },
   };
-  if (status === 'rejected') {
-    if ((mutation.document.access_epoch ?? doc.access_epoch) === doc.access_epoch) {
-      (await bumpDocumentAccessEpoch(slug));
-    }
-    (await invalidateLoadedCollabDocumentAndWait(slug));
-  }
 
   return {
     status: 200,

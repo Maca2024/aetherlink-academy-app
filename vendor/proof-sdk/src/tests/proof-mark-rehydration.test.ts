@@ -457,8 +457,8 @@ async function run(): Promise<void> {
       'Expected split suggestion reject to preserve nested comment markup',
     );
     assert(
-      (splitRejectedDoc?.access_epoch ?? 0) > (splitRejectBefore?.access_epoch ?? 0),
-      'Expected split suggestion reject to bump access_epoch so stale collab rooms must reload',
+      splitRejectedDoc?.access_epoch === splitRejectBefore?.access_epoch,
+      'Expected split suggestion reject to preserve access_epoch because canonical changes reconcile live collab rooms',
     );
     const splitRejectedMarks = parseStoredMarks(splitRejectedDoc?.marks);
     assert(splitRejectFixture.commentId in splitRejectedMarks, 'Expected split suggestion reject to preserve nested comment metadata');

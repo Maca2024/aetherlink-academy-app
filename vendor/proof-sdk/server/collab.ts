@@ -31,6 +31,8 @@ function setImmediate(callback: (...args: any[]) => void, ...args: any[]): NodeJ
     return runOutsideDatabaseTransaction(() => scheduleImmediate(callback, ...args));
 }
 const REDIS_TRANSACTION_ORIGIN = '__hocuspocus__redis__origin__';
+const CANONICAL_DOCUMENT_CHANGED_CLOSE_CODE = 1012;
+const CANONICAL_DOCUMENT_CHANGED_CLOSE_REASON = 'Canonical document changed';
 warmHeadlessMilkdownParserInBackground();
 type HocuspocusInstance = {
     listen?: () => void | Promise<void>;
@@ -587,6 +589,7 @@ const lastProjectionLengths = new Map<string, number>();
 type LoadedDocDbMeta = {
     updatedAt: string | null;
     yStateVersion: number;
+    canonicalYStateVersion: number;
     accessEpoch: number | null;
     baselineSnapshot: Uint8Array;
     baselineStateVector: Uint8Array;
@@ -1015,6 +1018,8 @@ type CollabAuthContext = {
     shareState: ShareState;
     canWrite: boolean;
     accessEpoch: number | null;
+    writeBaseValidated?: boolean;
+    writeBasePersistGeneration?: number;
 };
 type CollabPresenceContext = CollabAuthContext & {
     activeCollabConnectionId?: string;
@@ -1501,6 +1506,14 @@ function logStaleEpochWrite(slug: string, source: string, details: Record<string
         },
     });
 }
+function logClientContributionDroppedOrRejected(slug: string, stage: string, reason: string, details: Record<string, unknown> = {}): void {
+    console.warn('[collab] client contribution dropped or rejected', {
+        slug,
+        stage,
+        reason,
+        ...details,
+    });
+}
 function getContextAccessEpoch(context: unknown): number | null {
     if (!context || typeof context !== 'object' || Array.isArray(context))
         return null;
@@ -1515,7 +1528,16 @@ async function shouldDropStaleContextWrite(slug: string, context: unknown, sourc
     const sessionAccessEpoch = getContextAccessEpoch(context);
     if (sessionAccessEpoch === null)
         return false;
-    const auth = (await getDocumentAuthStateBySlug(slug));
+    let auth: Awaited<ReturnType<typeof getDocumentAuthStateBySlug>>;
+    try {
+        auth = await getDocumentAuthStateBySlug(slug);
+    }
+    catch (error) {
+        logClientContributionDroppedOrRejected(slug, source, 'auth_state_read_failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
     if (!auth || typeof auth.access_epoch !== 'number')
         return false;
     if (auth.access_epoch === sessionAccessEpoch)
@@ -1525,6 +1547,66 @@ async function shouldDropStaleContextWrite(slug: string, context: unknown, sourc
         currentAccessEpoch: auth.access_epoch,
     });
     return true;
+}
+function rejectStaleCollabContribution(slug: string, details: Record<string, unknown>): never {
+    console.warn('[collab] stale collab contribution rejected before merge', { slug, ...details });
+    traceServerIncident({
+        slug,
+        subsystem: 'collab',
+        level: 'warn',
+        eventType: 'stale_session_base_rejected',
+        message: 'Collab contribution was rejected because its session base was stale',
+        data: details,
+    });
+    const error = new Error(CANONICAL_DOCUMENT_CHANGED_CLOSE_REASON) as Error & {
+        code: number;
+        reason: string;
+    };
+    error.code = CANONICAL_DOCUMENT_CHANGED_CLOSE_CODE;
+    error.reason = CANONICAL_DOCUMENT_CHANGED_CLOSE_REASON;
+    throw error;
+}
+async function assertCurrentCollabWriteBase(slug: string, context: unknown): Promise<void> {
+    if (!isCollabAuthContext(context))
+        return;
+    const pendingCanonicalApply = externalApplyQueues.get(slug);
+    if (pendingCanonicalApply) {
+        await pendingCanonicalApply;
+    }
+    const generationBeforeRead = getPersistGeneration(slug);
+    let auth: Awaited<ReturnType<typeof getDocumentAuthStateBySlug>>;
+    try {
+        auth = await getDocumentAuthStateBySlug(slug);
+    }
+    catch (error) {
+        console.warn('[collab] collab write-base validation failed before merge', {
+            slug,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+    const currentAccessEpoch = typeof auth?.access_epoch === 'number' ? auth.access_epoch : null;
+    const currentGeneration = getPersistGeneration(slug);
+    const generationChangedDuringRead = generationBeforeRead !== currentGeneration;
+    const admittedGenerationIsStale = context.writeBaseValidated === true
+        && context.writeBasePersistGeneration !== currentGeneration;
+    const accessEpochIsStale = currentAccessEpoch === null
+        || context.accessEpoch !== currentAccessEpoch;
+    if (generationChangedDuringRead || admittedGenerationIsStale || accessEpochIsStale) {
+        rejectStaleCollabContribution(slug, {
+            reason: generationChangedDuringRead || admittedGenerationIsStale
+                ? 'persist_generation_mismatch'
+                : 'access_epoch_mismatch',
+            sessionAccessEpoch: context.accessEpoch,
+            currentAccessEpoch,
+            admittedPersistGeneration: context.writeBasePersistGeneration ?? null,
+            currentPersistGeneration: currentGeneration,
+        });
+    }
+    if (context.writeBaseValidated !== true) {
+        context.writeBasePersistGeneration = currentGeneration;
+        context.writeBaseValidated = true;
+    }
 }
 function sameStateVector(a: Uint8Array, b: Uint8Array): boolean {
     if (a.byteLength !== b.byteLength)
@@ -1802,12 +1884,22 @@ function ensureDurablePersistTracking(slug: string, ydoc: Y.Doc): void {
             : null;
         if (shouldDropWriteDuringShutdown(slug, 'durablePersistTracking'))
             return;
-        if (originContext && getContextAccessEpoch(originContext) !== (loadedDocDbMeta.get(slug)?.accessEpoch ?? null))
+        if (originContext && getContextAccessEpoch(originContext) !== (loadedDocDbMeta.get(slug)?.accessEpoch ?? null)) {
+            logClientContributionDroppedOrRejected(slug, 'durablePersistTracking', 'access_epoch_mismatch');
             return;
-        if (collabInvalidations.has(slug) || isRewriteLocked(slug))
+        }
+        if (collabInvalidations.has(slug)) {
+            logClientContributionDroppedOrRejected(slug, 'durablePersistTracking', 'room_invalidated');
             return;
-        if (loadedDocs.get(slug) !== ydoc)
+        }
+        if (isRewriteLocked(slug)) {
+            logClientContributionDroppedOrRejected(slug, 'durablePersistTracking', 'rewrite_locked');
             return;
+        }
+        if (loadedDocs.get(slug) !== ydoc) {
+            logClientContributionDroppedOrRejected(slug, 'durablePersistTracking', 'superseded_doc_reference');
+            return;
+        }
         markDocChanged(slug);
         schedulePersistDoc(slug, ydoc);
     });
@@ -2130,6 +2222,7 @@ type CollabSessionClaims = {
     role: ShareRole;
     exp: number;
     accessEpoch: number;
+    yStateVersion?: number;
     tokenId: string | null;
     jti: string;
 };
@@ -2194,7 +2287,7 @@ function verifyCollabToken(token: string): CollabSessionClaims | null {
         return null;
     if (Date.now() >= exp * 1000)
         return null;
-    return { slug, role, exp, accessEpoch, tokenId, jti };
+    return { slug, role, exp, accessEpoch, tokenId: tokenId as string | null, jti };
 }
 export function isValidCollabSessionToken(token: string): boolean {
     return Boolean(verifyCollabToken(token));
@@ -4780,10 +4873,11 @@ function getPersistedDocDegradationReason(ydoc: Y.Doc | null | undefined): Persi
         return null;
     return persistedDocDegradationReasons.get(ydoc) ?? null;
 }
-function setLoadedDocDbMeta(slug: string, updatedAt: string | null, yStateVersion: number, accessEpoch: number | null, baselineSnapshot: Uint8Array, baselineStateVector: Uint8Array): void {
+function setLoadedDocDbMeta(slug: string, updatedAt: string | null, yStateVersion: number, accessEpoch: number | null, baselineSnapshot: Uint8Array, baselineStateVector: Uint8Array, canonicalYStateVersion = yStateVersion): void {
     loadedDocDbMeta.set(slug, {
         updatedAt,
         yStateVersion,
+        canonicalYStateVersion,
         accessEpoch,
         baselineSnapshot,
         baselineStateVector,
@@ -4804,12 +4898,12 @@ function getAuthoritativeBaseline(slug: string): AuthoritativeBaseline | null {
         return null;
     return { snapshot, stateVector };
 }
-function refreshLoadedDocDbMeta(slug: string, ydoc: Y.Doc, updatedAt: string | null, yStateVersion: number, accessEpoch: number | null, baseline: AuthoritativeBaseline | null = null): void {
+function refreshLoadedDocDbMeta(slug: string, ydoc: Y.Doc, updatedAt: string | null, yStateVersion: number, accessEpoch: number | null, baseline: AuthoritativeBaseline | null = null, canonicalYStateVersion = yStateVersion): void {
     const effectiveBaseline = baseline ?? getAuthoritativeBaseline(slug) ?? buildAuthoritativeBaseline(ydoc);
     if (!baseline && !getAuthoritativeBaseline(slug)) {
         setAuthoritativeBaseline(slug, effectiveBaseline);
     }
-    setLoadedDocDbMeta(slug, updatedAt, yStateVersion, accessEpoch, effectiveBaseline.snapshot, effectiveBaseline.stateVector);
+    setLoadedDocDbMeta(slug, updatedAt, yStateVersion, accessEpoch, effectiveBaseline.snapshot, effectiveBaseline.stateVector, canonicalYStateVersion);
 }
 const STRUCTURED_MARKDOWN_FRAGMENT_SEED_PATTERN = [
     /(^|\n)\s{0,3}#{1,6}\s+/m,
@@ -6291,7 +6385,8 @@ export async function loadCanonicalYDoc(slug: string, options: {
     if (!slug)
         return null;
     const allowFragmentRecovery = options.allowFragmentRecovery !== false;
-    const preferPersisted = options.preferPersisted === true;
+    const preferPersisted = options.preferPersisted === true
+        || (options.liveRequired === false && !hasLocalLiveCollabDoc(slug));
     const skipPersistedHydration = options.skipPersistedHydration === true;
     if (runtime.enabled && !preferPersisted) {
         const existingLiveDoc = getLiveHocuspocusDoc(slug);
@@ -6361,22 +6456,7 @@ export async function registerCanonicalYDocPersistence(slug: string, ydoc: Y.Doc
     accessEpoch: number | null;
 }): Promise<void> {
     rememberLoadedDoc(slug, ydoc);
-    let authoritativeBaseline: AuthoritativeBaseline | null = null;
-    if (meta.yStateVersion > 0) {
-        try {
-            const persisted = (await readPersistedDocState(slug));
-            if (persisted.yStateVersion === meta.yStateVersion) {
-                authoritativeBaseline = {
-                    snapshot: persisted.authoritativeSnapshot,
-                    stateVector: persisted.stateVector,
-                };
-            }
-        }
-        catch {
-            authoritativeBaseline = null;
-        }
-    }
-    authoritativeBaseline = authoritativeBaseline ?? buildAuthoritativeBaseline(ydoc);
+    const authoritativeBaseline = buildAuthoritativeBaseline(ydoc);
     setAuthoritativeBaseline(slug, authoritativeBaseline);
     updatesSinceCompaction.set(slug, Math.max(0, meta.yStateVersion - ((await getLatestYSnapshot(slug))?.version ?? 0)));
     refreshLoadedDocDbMeta(slug, ydoc, meta.updatedAt, meta.yStateVersion, meta.accessEpoch, authoritativeBaseline);
@@ -6386,13 +6466,14 @@ export async function registerCanonicalYDocPersistence(slug: string, ydoc: Y.Doc
 async function refreshLoadedDocDbMetaFromDb(slug: string, ydoc: Y.Doc): Promise<void> {
     const row = (await getDocumentBySlug(slug));
     const yStateVersion = (await getLatestYStateVersion(slug));
-    refreshLoadedDocDbMeta(slug, ydoc, row?.updated_at ?? null, yStateVersion, typeof row?.access_epoch === 'number' ? row.access_epoch : null);
+    refreshLoadedDocDbMeta(slug, ydoc, row?.updated_at ?? null, yStateVersion, typeof row?.access_epoch === 'number' ? row.access_epoch : null, null, row?.y_state_version ?? 0);
 }
 async function hydrateDocFromDbAsync(slug: string, options: {
     allowFragmentRecovery?: boolean;
 } = {}): Promise<Y.Doc> {
     const allowFragmentRecovery = options.allowFragmentRecovery !== false;
     const persisted = await readPersistedDocStateAsync(slug, { allowFragmentRecovery });
+    const row = await getDocumentBySlug(slug);
     const ydoc = persisted.ydoc;
     setPersistedDocDegradationReason(ydoc, persisted.degradedReason);
     docPersistGenerations.set(ydoc, getPersistGeneration(slug));
@@ -6404,7 +6485,7 @@ async function hydrateDocFromDbAsync(slug: string, options: {
     refreshLoadedDocDbMeta(slug, ydoc, persisted.updatedAt, persisted.yStateVersion, persisted.accessEpoch, {
         snapshot: persisted.authoritativeSnapshot,
         stateVector: persisted.stateVector,
-    });
+    }, row?.y_state_version ?? 0);
     (await refreshPersistedDocCacheFromDb(slug, ydoc, 'async', allowFragmentRecovery ? 'allowed' : 'blocked', persisted.degradedReason));
     return ydoc;
 }
@@ -6419,6 +6500,10 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
     const allowDuringShutdown = options.allowDuringShutdown === true;
     const liveYdoc = ydoc;
     const expectedAccessEpoch = loadedDocDbMeta.get(slug)?.accessEpoch ?? null;
+    const logDroppedClientPersist = (stage: string, reason: string, details: Record<string, unknown> = {}): void => {
+        if (sourceActor === 'collab')
+            logClientContributionDroppedOrRejected(slug, stage, reason, details);
+    };
     if (!allowDuringShutdown && shouldDropWriteDuringShutdown(slug, 'persistDoc')) {
         persistPending.delete(slug);
         return;
@@ -6447,6 +6532,9 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
         evictLocalDocState(slug);
         persistPending.delete(slug);
         persistInFlight.delete(slug);
+        logDroppedClientPersist('persistDoc', 'share_state_blocked', {
+            shareState: docRow.share_state,
+        });
         return;
     }
     if (collabInvalidations.has(slug)) {
@@ -6454,6 +6542,7 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
             (await maybeThrowOnDirtyShutdownGuard(slug, ydoc, 'invalidated'));
         }
         persistPending.delete(slug);
+        logDroppedClientPersist('persistDoc', 'room_invalidated');
         return;
     }
     const currentGeneration = getPersistGeneration(slug);
@@ -6534,6 +6623,7 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
             }
             persistPending.delete(slug);
             invalidateLoadedCollabDocument(slug);
+            logDroppedClientPersist('persistDoc', 'room_quarantined');
             return;
         }
         const loadedMeta = loadedDocDbMeta.get(slug);
@@ -6554,7 +6644,7 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
                         currentAccessEpoch: resolution.persistedState.accessEpoch,
                     });
                 }
-                applyPersistedStateToLoadedDoc(slug, resolution.persistedState);
+                applyPersistedStateToLoadedDoc(slug, resolution.persistedState, docRow?.y_state_version ?? resolution.persistedState.yStateVersion);
                 const quarantine = (await maybeQuarantineStaleOnStoreReload(slug, resolution, { source: 'persistDoc', sourceActor }));
                 if (!resolution.logSuppressed) {
                     console.warn('[collab_stale_onstore_reload]', {
@@ -6617,6 +6707,7 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
         }
         try {
             if ((persistGeneration.get(slug) ?? 0) !== generation || collabInvalidations.has(slug)) {
+                logDroppedClientPersist('persistDoc.beforeTransaction', 'generation_changed_or_room_invalidated');
                 return;
             }
             const priorBaseline = getAuthoritativeBaseline(slug);
@@ -6646,6 +6737,11 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
                 const current = locked.rows[0];
                 if (!current || !['ACTIVE', 'PAUSED'].includes(String(current.share_state)) || expectedAccessEpoch !== null && current.access_epoch !== expectedAccessEpoch) {
                     aborted = true;
+                    logDroppedClientPersist('persistDoc.transaction', 'document_or_access_epoch_changed', {
+                        shareState: current?.share_state ?? null,
+                        expectedAccessEpoch,
+                        currentAccessEpoch: current?.access_epoch ?? null,
+                    });
                     return;
                 }
                 const durable = new Y.Doc();
@@ -6676,6 +6772,7 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
                 authoritativeStateVector = Y.encodeStateVector(durable);
                 if ((persistGeneration.get(slug) ?? 0) !== generation || collabInvalidations.has(slug)) {
                     aborted = true;
+                    logDroppedClientPersist('persistDoc.transaction', 'generation_changed_or_room_invalidated');
                     return;
                 }
                 // Read docRow inside the transaction to avoid stale comparisons
@@ -6909,11 +7006,15 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
                 // Invalidation may begin during any SQL await above. Throw inside the
                 // pinned transaction so every update/blob/projection write rolls back.
                 if ((persistGeneration.get(slug) ?? 0) !== generation || collabInvalidations.has(slug)) {
+                    logDroppedClientPersist('persistDoc.transactionCommit', 'generation_changed_or_room_invalidated');
                     throw new PersistInvalidatedError();
                 }
             });
             (await persistTx());
-            if ((persistGeneration.get(slug) ?? 0) !== generation || collabInvalidations.has(slug)) return;
+            if ((persistGeneration.get(slug) ?? 0) !== generation || collabInvalidations.has(slug)) {
+                logDroppedClientPersist('persistDoc.afterTransaction', 'generation_changed_or_room_invalidated');
+                return;
+            }
             if (aborted || skipPersistedStateWrite) {
                 return;
             }
@@ -6929,7 +7030,8 @@ async function persistDocInner(slug: string, ydoc: Y.Doc, sourceActor: string = 
             };
             Y.applyUpdate(liveYdoc, authoritativeSnapshot, 'server-postgres-merge');
             setAuthoritativeBaseline(slug, authoritativeBaseline);
-            refreshLoadedDocDbMeta(slug, liveYdoc, (await getDocumentBySlug(slug))?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof (await getDocumentBySlug(slug))?.access_epoch === 'number' ? (await getDocumentBySlug(slug))?.access_epoch ?? null : null, authoritativeBaseline);
+            const currentRow = await getDocumentBySlug(slug);
+            refreshLoadedDocDbMeta(slug, liveYdoc, currentRow?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof currentRow?.access_epoch === 'number' ? currentRow.access_epoch : null, authoritativeBaseline, currentRow?.y_state_version ?? 0);
             (await refreshSnapshotForSlug(slug));
         }
         catch (error) {
@@ -7090,17 +7192,22 @@ function shouldDropStaleOnStoreDocumentWrite(slug: string, ydoc: Y.Doc): boolean
     }
     return false;
 }
-function applyPersistedStateToLoadedDoc(slug: string, persistedState: PersistedDocState): void {
+function applyPersistedStateToLoadedDoc(slug: string, persistedState: PersistedDocState, canonicalYStateVersion = persistedState.yStateVersion): void {
     const liveDoc = getLiveHocuspocusDoc(slug);
     const nextDoc = liveDoc ?? persistedState.ydoc;
+    const authoritativeBaseline = buildAuthoritativeBaseline(nextDoc);
     rememberLoadedDoc(slug, nextDoc);
     touchDoc(slug);
-    setAuthoritativeBaseline(slug, {
-        snapshot: persistedState.authoritativeSnapshot,
-        stateVector: persistedState.stateVector,
-    });
+    setAuthoritativeBaseline(slug, authoritativeBaseline);
     updatesSinceCompaction.set(slug, 0);
-    setLoadedDocDbMeta(slug, persistedState.updatedAt, persistedState.yStateVersion, persistedState.accessEpoch, persistedState.authoritativeSnapshot, persistedState.stateVector);
+    setLoadedDocDbMeta(slug, persistedState.updatedAt, persistedState.yStateVersion, persistedState.accessEpoch, authoritativeBaseline.snapshot, authoritativeBaseline.stateVector, canonicalYStateVersion);
+}
+function refreshCanonicalRemoteApplyBookkeeping(slug: string, liveDoc: Y.Doc, persistedState: PersistedDocState, persistedRow: DocumentRow, authoritativeBaseline: AuthoritativeBaseline): void {
+    rememberLoadedDoc(slug, liveDoc, 'live');
+    touchDoc(slug);
+    setAuthoritativeBaseline(slug, authoritativeBaseline);
+    updatesSinceCompaction.set(slug, 0);
+    setLoadedDocDbMeta(slug, persistedRow.updated_at ?? null, persistedState.yStateVersion, typeof persistedRow.access_epoch === 'number' ? persistedRow.access_epoch : null, authoritativeBaseline.snapshot, authoritativeBaseline.stateVector, persistedRow.y_state_version ?? 0);
 }
 function scheduleStaleOnStoreReload(slug: string): void {
     cancelPendingPersistWork(slug, { advanceGeneration: true });
@@ -7671,7 +7778,9 @@ function applyMarksMapDiff(map: Y.Map<unknown>, next: Record<string, unknown>): 
             map.delete(key);
     }
     for (const [key, value] of Object.entries(next)) {
-        map.set(key, value as unknown);
+        if (stableStringify(map.get(key)) !== stableStringify(value)) {
+            map.set(key, value as unknown);
+        }
     }
 }
 export type CanonicalCollabSyncOptions = {
@@ -8009,7 +8118,7 @@ async function syncCanonicalDocumentStateToCollabInner(slug: string, options: Ca
         }
         const baselineBeforeWrite = getAuthoritativeBaseline(slug) ?? EMPTY_AUTHORITATIVE_BASELINE;
         const currentRow = (await getDocumentBySlug(slug));
-        refreshLoadedDocDbMeta(slug, ydoc, currentRow?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof currentRow?.access_epoch === 'number' ? currentRow.access_epoch : null, baselineBeforeWrite);
+        refreshLoadedDocDbMeta(slug, ydoc, currentRow?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof currentRow?.access_epoch === 'number' ? currentRow.access_epoch : null, baselineBeforeWrite, currentRow?.y_state_version ?? 0);
         await markSkipNextOnStorePersistFromAuthoritativeState(slug, ydoc, {
             sourceActor,
             ...(fragmentAuthorityMarkdown !== null ? { markdownHint: fragmentAuthorityMarkdown } : {}),
@@ -8372,7 +8481,7 @@ async function applyCanonicalDocumentToCollabInner(slug: string, options: Collab
         rememberLoadedDoc(slug, ydoc);
         const baselineBeforeWrite = getAuthoritativeBaseline(slug) ?? EMPTY_AUTHORITATIVE_BASELINE;
         const currentRow = (await getDocumentBySlug(slug));
-        refreshLoadedDocDbMeta(slug, ydoc, currentRow?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof currentRow?.access_epoch === 'number' ? currentRow.access_epoch : null, baselineBeforeWrite);
+        refreshLoadedDocDbMeta(slug, ydoc, currentRow?.updated_at ?? null, (await getLatestYStateVersion(slug)), typeof currentRow?.access_epoch === 'number' ? currentRow.access_epoch : null, baselineBeforeWrite, currentRow?.y_state_version ?? 0);
         await markSkipNextOnStorePersistFromAuthoritativeState(slug, ydoc, {
             sourceActor: origin,
         });
@@ -8938,20 +9047,128 @@ function evictStaleLocalStateForAccessEpoch(slug: string, accessEpoch: number): 
         // ignore
     }
 }
-function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string | null, yStateVersion: number, force = false, closeHocuspocusConnections = true): void {
+// Canonical change detection uses documents.y_state_version: canonical-document.ts
+// updates that counter in the same transaction as markdown/marks. The local
+// onChange/persist path first appends document_y_updates (advancing
+// getLatestYStateVersion) and its no-projection branch separately copies that max
+// into the documents row, so the two counters can transiently differ on the room
+// owner. The updates-table max remains the Yjs reconstruction cursor, not a reason
+// by itself to replace or close a live canonical room.
+function hasStaleLocalCanonicalMetadata(slug: string, updatedAt: string | null, canonicalYStateVersion: number, force = false): boolean {
     const loadedMeta = loadedDocDbMeta.get(slug);
     if (!loadedMeta && !force)
-        return;
+        return false;
     const updatedAtMatches = updatedAt === null || loadedMeta?.updatedAt === updatedAt;
-    if (!force && updatedAtMatches && loadedMeta?.yStateVersion === yStateVersion)
+    return force || !updatedAtMatches || loadedMeta?.canonicalYStateVersion !== canonicalYStateVersion;
+}
+function stateVectorContains(target: Y.Doc, baselineStateVector: Uint8Array): boolean {
+    const targetClocks = Y.decodeStateVector(Y.encodeStateVector(target));
+    const baselineClocks = Y.decodeStateVector(baselineStateVector);
+    for (const [clientId, baselineClock] of baselineClocks) {
+        if ((targetClocks.get(clientId) ?? 0) < baselineClock)
+            return false;
+    }
+    return true;
+}
+function alignLoadedAuthorityWithLiveRoom(slug: string, liveDoc: Y.Doc): boolean {
+    const authority = loadedDocAuthorityOrigins.get(slug);
+    if (!authority) {
+        // onLoad may still be racing; refuse in-place apply until authority is bound.
+        return false;
+    }
+    if (authority.ydoc === liveDoc)
+        return true;
+    const loadedMeta = loadedDocDbMeta.get(slug);
+    if (!loadedMeta?.baselineStateVector)
+        return false;
+    // Hocuspocus can keep the connected room doc while loadedDocs points at a hydrate
+    // twin from onLoadDocument. When the live room still contains the shared baseline,
+    // rebind authority to the room clients are actually attached to before applying.
+    if (!stateVectorContains(liveDoc, loadedMeta.baselineStateVector))
+        return false;
+    rememberLoadedDoc(slug, liveDoc, 'live');
+    return loadedDocAuthorityOrigins.get(slug)?.ydoc === liveDoc;
+}
+function hasCompatibleCanonicalRemoteLineage(slug: string, liveDoc: Y.Doc, persistedState: PersistedDocState): boolean {
+    if (persistedState.degradedReason !== null)
+        return false;
+    if (!alignLoadedAuthorityWithLiveRoom(slug, liveDoc))
+        return false;
+    const loadedMeta = loadedDocDbMeta.get(slug);
+    if (!loadedMeta?.baselineStateVector)
+        return false;
+    return stateVectorContains(liveDoc, loadedMeta.baselineStateVector)
+        && stateVectorContains(persistedState.ydoc, loadedMeta.baselineStateVector);
+}
+function persistedCanonicalContentMatchesLive(liveDoc: Y.Doc, persistedState: PersistedDocState, persistedRow: DocumentRow): boolean {
+    const persistedDelta = Y.encodeStateAsUpdate(persistedState.ydoc, Y.encodeStateVector(liveDoc));
+    const decodedDelta = Y.decodeUpdate(persistedDelta);
+    // Yjs represents an empty update as [0, 0], and can also emit a delete-set-only
+    // update for state already held by the receiver. With equal content, no structs
+    // means the persisted document has no canonical change missing from the live doc.
+    const persistedDeltaIsEmpty = persistedDelta.byteLength === 0 || decodedDelta.structs.length === 0;
+    const liveMarkdown = liveDoc.getText('markdown').toString();
+    const liveMarks = encodeMarksMap(liveDoc.getMap('marks'));
+    const persistedDocMarkdown = persistedState.ydoc.getText('markdown').toString();
+    const persistedDocMarks = encodeMarksMap(persistedState.ydoc.getMap('marks'));
+    const persistedRowMarks = parseStoredMarks(persistedRow.marks);
+    const fragmentMatches = stableStringify(liveDoc.getXmlFragment('prosemirror').toJSON())
+        === stableStringify(persistedState.ydoc.getXmlFragment('prosemirror').toJSON());
+    return persistedDeltaIsEmpty
+        && fragmentMatches
+        && liveMarkdown === persistedDocMarkdown
+        && liveMarkdown === (persistedRow.markdown ?? '')
+        && stableStringify(liveMarks) === stableStringify(persistedDocMarks)
+        && stableStringify(liveMarks) === stableStringify(persistedRowMarks);
+}
+function refreshCurrentPersistedCanonicalMetadata(slug: string, persistedState: PersistedDocState, persistedRow: DocumentRow): void {
+    const loadedMeta = loadedDocDbMeta.get(slug);
+    if (!loadedMeta)
+        throw new Error('loaded canonical metadata missing during content-match refresh');
+    setLoadedDocDbMeta(slug, persistedRow.updated_at ?? null, persistedState.yStateVersion, typeof persistedRow.access_epoch === 'number' ? persistedRow.access_epoch : null, loadedMeta.baselineSnapshot, loadedMeta.baselineStateVector, persistedRow.y_state_version ?? 0);
+}
+async function hasStaleLocalStateForPersistedVersion(slug: string, updatedAt: string | null, canonicalYStateVersion: number, force = false): Promise<boolean> {
+    if (!hasStaleLocalCanonicalMetadata(slug, updatedAt, canonicalYStateVersion, force))
+        return false;
+    if (force)
+        return true;
+    const liveDoc = getLiveHocuspocusDoc(slug);
+    if (!liveDoc || !hasLocalLiveCollabDoc(slug))
+        return true;
+    try {
+        const persistedState = await readPersistedDocState(slug, { allowFragmentRecovery: false });
+        const persistedRow = await getDocumentBySlug(slug);
+        if (!persistedRow
+            || getLiveHocuspocusDoc(slug) !== liveDoc
+            || !hasLocalLiveCollabDoc(slug)
+            || !hasCompatibleCanonicalRemoteLineage(slug, liveDoc, persistedState)
+            || !persistedCanonicalContentMatchesLive(liveDoc, persistedState, persistedRow)) {
+            return true;
+        }
+        const reason: PersistedCanonicalApplyReason = 'version-check';
+        console.log('[collab] persisted canonical content already live', {
+            slug,
+            reason,
+            rowVersion: persistedRow.y_state_version ?? 0,
+        });
+        refreshCurrentPersistedCanonicalMetadata(slug, persistedState, persistedRow);
+        return false;
+    }
+    catch {
+        return true;
+    }
+}
+function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string | null, canonicalYStateVersion: number, force = false, closeHocuspocusConnections = true): void {
+    const loadedMeta = loadedDocDbMeta.get(slug);
+    if (!hasStaleLocalCanonicalMetadata(slug, updatedAt, canonicalYStateVersion, force))
         return;
     const nextPersistGeneration = cancelPendingPersistWork(slug, { advanceGeneration: true });
     console.warn('[collab] evicting stale in-memory doc for persisted version bump', {
         slug,
         loadedUpdatedAt: loadedMeta?.updatedAt ?? null,
         currentUpdatedAt: updatedAt,
-        loadedYStateVersion: loadedMeta?.yStateVersion ?? null,
-        currentYStateVersion: yStateVersion,
+        loadedYStateVersion: loadedMeta?.canonicalYStateVersion ?? null,
+        currentYStateVersion: canonicalYStateVersion,
     });
     evictLocalDocState(slug);
     persistGeneration.set(slug, nextPersistGeneration);
@@ -8972,6 +9189,210 @@ function evictStaleLocalStateForPersistedVersion(slug: string, updatedAt: string
         // ignore
     }
 }
+async function fallbackCanonicalChangeClose(
+    slug: string,
+    version: number,
+    reason: 'no-live-doc' | 'apply-error' | 'markdown-mismatch' | 'marks-mismatch',
+    mismatch?: Record<string, unknown>,
+): Promise<void> {
+    let updatedAt: string | null = null;
+    let yStateVersion = version;
+    try {
+        const row = await getDocumentBySlug(slug);
+        updatedAt = row?.updated_at ?? null;
+        yStateVersion = Math.max(version, row?.y_state_version ?? 0);
+    }
+    catch {
+        // The fallback must still evict and close if the metadata read fails.
+    }
+    evictStaleLocalStateForPersistedVersion(slug, updatedAt, yStateVersion, true, false);
+    closeCollabRoomConnections(slug);
+    console.log('[collab] canonical change fallback close', { slug, reason, ...(mismatch ?? {}) });
+}
+type PersistedCanonicalApplyReason = 'version-check' | 'canonical-changed';
+async function applyPersistedCanonicalStateInPlaceInner(slug: string, reason: PersistedCanonicalApplyReason): Promise<CanonicalCollabSyncResult> {
+    if (!hasLocalLiveCollabDoc(slug)) {
+        await fallbackCanonicalChangeClose(slug, 0, 'no-live-doc');
+        return { applied: false, reason: 'live_doc_unretrievable' };
+    }
+    const liveDoc = getLiveHocuspocusDoc(slug);
+    if (!liveDoc) {
+        await fallbackCanonicalChangeClose(slug, 0, 'no-live-doc');
+        return { applied: false, reason: 'live_doc_unretrievable' };
+    }
+    const fromVersion = loadedDocDbMeta.get(slug)?.canonicalYStateVersion ?? 0;
+    try {
+        let persistedState = await readPersistedDocState(slug, { allowFragmentRecovery: false });
+        if (getLiveHocuspocusDoc(slug) !== liveDoc || !hasLocalLiveCollabDoc(slug)) {
+            await fallbackCanonicalChangeClose(slug, 0, 'no-live-doc');
+            return { applied: false, reason: 'live_doc_unretrievable' };
+        }
+        if (!hasCompatibleCanonicalRemoteLineage(slug, liveDoc, persistedState)) {
+            const loadedMeta = loadedDocDbMeta.get(slug);
+            const baseline = loadedMeta?.baselineStateVector ?? null;
+            console.warn('[collab] canonical lineage guard diagnostics', {
+                slug,
+                degradedReason: persistedState.degradedReason,
+                authorityMatchesLive: loadedDocAuthorityOrigins.get(slug)?.ydoc === liveDoc,
+                authorityPresent: loadedDocAuthorityOrigins.has(slug),
+                hasBaseline: baseline !== null,
+                liveClientId: liveDoc.clientID,
+                persistedClientId: persistedState.ydoc.clientID,
+                baselineClocks: baseline ? Array.from(Y.decodeStateVector(baseline).entries()) : null,
+                liveContainsBaseline: baseline ? stateVectorContains(liveDoc, baseline) : null,
+                persistedContainsBaseline: baseline ? stateVectorContains(persistedState.ydoc, baseline) : null,
+                liveClients: Array.from(Y.decodeStateVector(Y.encodeStateVector(liveDoc)).entries()),
+                persistedClients: Array.from(Y.decodeStateVector(Y.encodeStateVector(persistedState.ydoc)).entries()),
+            });
+            throw new Error('unsafe canonical remote CRDT lineage');
+        }
+        let persistedRow = await getDocumentBySlug(slug);
+        if (!persistedRow) {
+            throw new Error('canonical row missing during remote apply');
+        }
+        if (persistedCanonicalContentMatchesLive(liveDoc, persistedState, persistedRow)) {
+            console.log('[collab] persisted canonical content already live', {
+                slug,
+                reason,
+                rowVersion: persistedRow.y_state_version ?? 0,
+            });
+            refreshCurrentPersistedCanonicalMetadata(slug, persistedState, persistedRow);
+            return { applied: true };
+        }
+        let updateBytes = 0;
+        const applyPersistedUpdate = (): void => {
+            const update = Y.encodeStateAsUpdate(persistedState.ydoc, Y.encodeStateVector(liveDoc));
+            updateBytes += update.byteLength;
+            Y.applyUpdate(liveDoc, update, 'canonical-remote');
+        };
+        const inspectAppliedState = () => {
+            const liveMarkdown = liveDoc.getText('markdown').toString();
+            const persistedMarkdown = persistedRow?.markdown ?? '';
+            const liveMarks = encodeMarksMap(liveDoc.getMap('marks'));
+            const persistedMarks = parseStoredMarks(persistedRow?.marks);
+            const liveMarkKeys = Object.keys(liveMarks).sort();
+            const persistedMarkKeys = Object.keys(persistedMarks).sort();
+            const marksMatch = stableStringify(liveMarks) === stableStringify(persistedMarks);
+            return {
+                liveMarkdown,
+                persistedMarkdown,
+                liveMarks,
+                persistedMarks,
+                liveMarkKeys,
+                persistedMarkKeys,
+                markdownMatches: liveMarkdown === persistedMarkdown,
+                marksMatch,
+            };
+        };
+        applyPersistedUpdate();
+        let verification = inspectAppliedState();
+        if (!verification.markdownMatches || !verification.marksMatch) {
+            const retriedState = await readPersistedDocState(slug, { allowFragmentRecovery: false });
+            if (getLiveHocuspocusDoc(slug) !== liveDoc || !hasLocalLiveCollabDoc(slug)) {
+                await fallbackCanonicalChangeClose(slug, 0, 'no-live-doc');
+                return { applied: false, reason: 'live_doc_unretrievable' };
+            }
+            if (!hasCompatibleCanonicalRemoteLineage(slug, liveDoc, retriedState)) {
+                throw new Error('unsafe canonical remote CRDT lineage after persisted-state retry');
+            }
+            const retriedRow = await getDocumentBySlug(slug);
+            if (!retriedRow) {
+                throw new Error('canonical row missing during remote apply retry');
+            }
+            persistedState = retriedState;
+            persistedRow = retriedRow;
+            applyPersistedUpdate();
+            verification = inspectAppliedState();
+        }
+        if (!verification.markdownMatches) {
+            let firstDifference = 0;
+            const sharedLength = Math.min(verification.liveMarkdown.length, verification.persistedMarkdown.length);
+            while (firstDifference < sharedLength
+                && verification.liveMarkdown.charCodeAt(firstDifference) === verification.persistedMarkdown.charCodeAt(firstDifference)) {
+                firstDifference += 1;
+            }
+            await fallbackCanonicalChangeClose(slug, persistedRow.y_state_version ?? 0, 'markdown-mismatch', {
+                liveMarkdownLength: verification.liveMarkdown.length,
+                persistedMarkdownLength: verification.persistedMarkdown.length,
+                firstDifference,
+            });
+            return { applied: false, reason: 'fragment_unhealthy_content_write' };
+        }
+        if (!verification.marksMatch) {
+            const liveMarkKeySet = new Set(verification.liveMarkKeys);
+            const persistedMarkKeySet = new Set(verification.persistedMarkKeys);
+            await fallbackCanonicalChangeClose(slug, persistedRow.y_state_version ?? 0, 'marks-mismatch', {
+                onlyInLive: verification.liveMarkKeys.filter((key) => !persistedMarkKeySet.has(key)),
+                onlyInPersisted: verification.persistedMarkKeys.filter((key) => !liveMarkKeySet.has(key)),
+                changed: verification.liveMarkKeys.filter((key) => persistedMarkKeySet.has(key)
+                    && stableStringify(verification.liveMarks[key]) !== stableStringify(verification.persistedMarks[key])),
+            });
+            return { applied: false, reason: 'fragment_unhealthy_marks_only' };
+        }
+        // The live doc legitimately runs ahead of persisted state (client edits awaiting
+        // persistence), so the shared baseline is the persisted state we just merged in:
+        // contained in persisted history by definition and in the live doc by the apply above.
+        // Plain encodings on purpose: buildAuthoritativeBaseline clones legacy-ephemeral docs
+        // into a fresh Y.Doc with a new client id, which yields a state vector contained in
+        // neither the live nor the persisted doc and defeats the lineage guard.
+        const authoritativeBaseline: AuthoritativeBaseline = {
+            snapshot: Y.encodeStateAsUpdate(persistedState.ydoc),
+            stateVector: Y.encodeStateVector(persistedState.ydoc),
+        };
+        if (!stateVectorContains(liveDoc, authoritativeBaseline.stateVector)) {
+            const liveStore = (liveDoc as any).store;
+            console.warn('[collab] post-apply containment diagnostics', {
+                slug,
+                updateBytes,
+                liveClients: Array.from(Y.decodeStateVector(Y.encodeStateVector(liveDoc)).entries()),
+                persistedClients: Array.from(Y.decodeStateVector(Y.encodeStateVector(persistedState.ydoc)).entries()),
+                baselineClients: Array.from(Y.decodeStateVector(authoritativeBaseline.stateVector).entries()),
+                livePendingStructs: liveStore?.pendingStructs ? Array.from(Y.decodeStateVector(Y.encodeStateVector(persistedState.ydoc)).keys()).length : 0,
+                livePendingStructsMissing: liveStore?.pendingStructs?.missing ? Array.from(liveStore.pendingStructs.missing.entries()) : null,
+                livePendingDs: liveStore?.pendingDs ? liveStore.pendingDs.byteLength : 0,
+                persistedLegacyEphemeral: hasLegacyEphemeralCollabState(persistedState.ydoc),
+                markdownMatches: verification.markdownMatches,
+                marksMatch: verification.marksMatch,
+            });
+            throw new Error('live doc does not contain the persisted canonical baseline after apply');
+        }
+        refreshCanonicalRemoteApplyBookkeeping(slug, liveDoc, persistedState, persistedRow, authoritativeBaseline);
+        console.log('[collab] live room refreshed in place', {
+            slug,
+            reason,
+            fromVersion,
+            toVersion: persistedRow.y_state_version ?? 0,
+            updateBytes,
+            updatedAt: persistedRow.updated_at ?? null,
+        });
+        return { applied: true };
+    }
+    catch (error) {
+        console.warn('[collab] in-place canonical apply failed', {
+            slug,
+            reason,
+            fromVersion,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        await fallbackCanonicalChangeClose(slug, 0, 'apply-error');
+        return { applied: false, reason: 'live_doc_unretrievable' };
+    }
+}
+async function applyPersistedCanonicalStateInPlace(slug: string, reason: PersistedCanonicalApplyReason): Promise<CanonicalCollabSyncResult> {
+    const previous = externalApplyQueues.get(slug) ?? Promise.resolve({ applied: true } as CanonicalCollabSyncResult);
+    const next = previous
+        .catch(() => { })
+        .then(() => applyPersistedCanonicalStateInPlaceInner(slug, reason));
+    externalApplyQueues.set(slug, next);
+    try {
+        return await next;
+    }
+    finally {
+        if (externalApplyQueues.get(slug) === next) {
+            externalApplyQueues.delete(slug);
+        }
+    }
+}
 subscribeToCanonicalChanges(async (message) => {
     if (message.instanceId === CANONICAL_CHANGE_INSTANCE_ID)
         return;
@@ -8989,22 +9410,7 @@ subscribeToCanonicalChanges(async (message) => {
         });
         return;
     }
-    const row = await getDocumentBySlug(message.slug);
-    evictStaleLocalStateForPersistedVersion(
-        message.slug,
-        row?.updated_at ?? null,
-        message.version,
-        true,
-        false,
-    );
-    closeCollabRoomConnections(message.slug);
-    console.log('[collab] canonical change received', {
-        slug: message.slug,
-        pid: process.pid,
-        fromInstanceId: message.instanceId,
-        fromPid: message.pid,
-        action: 'closed-connections',
-    });
+    await applyPersistedCanonicalStateInPlace(message.slug, 'canonical-changed');
 });
 async function reconcileStaleProjectionsOnStartup(): Promise<void> {
     const startedAt = Date.now();
@@ -9287,6 +9693,23 @@ export function hasPotentiallyLiveCollabDoc(slug: string): boolean {
     const instance = hocuspocusInstance as any;
     return loadedDocs.has(slug) || Boolean(instance?.documents?.has?.(slug));
 }
+export function hasLocalLiveCollabDoc(slug: string): boolean {
+    if (!slug)
+        return false;
+    if (hasCollabRoomConnections(slug))
+        return true;
+    const liveDoc = getLiveHocuspocusDoc(slug) as (Y.Doc & {
+        getConnections?: () => unknown[];
+    }) | null;
+    if (!liveDoc || typeof liveDoc.getConnections !== 'function')
+        return false;
+    try {
+        return liveDoc.getConnections().length > 0;
+    }
+    catch {
+        return false;
+    }
+}
 export async function buildCollabSession(slug: string, role: ShareRole, options?: {
     tokenId?: string | null;
     wsUrlBase?: string | null;
@@ -9340,7 +9763,16 @@ export async function buildCollabSession(slug: string, role: ShareRole, options?
     }
     await ensureCanonicalYjsBaselineForDocument(slug);
     evictStaleLocalStateForAccessEpoch(slug, doc.access_epoch);
-    evictStaleLocalStateForPersistedVersion(slug, (await getDocumentBySlug(slug))?.updated_at ?? null, (await getLatestYStateVersion(slug)));
+    const persistedRow = await getDocumentBySlug(slug);
+    const canonicalYStateVersion = persistedRow?.y_state_version ?? 0;
+    if (await hasStaleLocalStateForPersistedVersion(slug, persistedRow?.updated_at ?? null, canonicalYStateVersion)) {
+        if (hasLocalLiveCollabDoc(slug)) {
+            await applyPersistedCanonicalStateInPlace(slug, 'version-check');
+        }
+        else {
+            evictStaleLocalStateForPersistedVersion(slug, persistedRow?.updated_at ?? null, canonicalYStateVersion);
+        }
+    }
     const ttlSeconds = parsePositiveInt(process.env.COLLAB_SESSION_TTL_SECONDS, DEFAULT_COLLAB_SESSION_TTL_SECONDS);
     const expiresAtEpoch = Math.floor(Date.now() / 1000) + ttlSeconds;
     noteRecentCollabSessionLease(slug, doc.access_epoch, ttlSeconds * 1000);
@@ -9351,16 +9783,17 @@ export async function buildCollabSession(slug: string, role: ShareRole, options?
         tokenId: options?.tokenId ?? null,
         ttlSeconds,
     });
+    const snapshot = (await getLatestYSnapshot(slug));
+    const persistedStateVersion = Math.max(snapshot?.version ?? 0, (await getDocumentBySlug(slug))?.y_state_version ?? 0);
     const token = signCollabClaims({
         slug,
         role,
         exp: expiresAtEpoch,
         accessEpoch: doc.access_epoch,
+        yStateVersion: persistedStateVersion,
         tokenId: options?.tokenId ?? null,
         jti: randomUUID(),
     });
-    const snapshot = (await getLatestYSnapshot(slug));
-    const persistedStateVersion = Math.max(snapshot?.version ?? 0, (await getDocumentBySlug(slug))?.y_state_version ?? 0);
     const wsUrlBase = (options?.wsUrlBase || runtime.wsUrlBase || '').replace(/\/+$/, '');
     if (!wsUrlBase) {
         const durationMs = Math.max(0, Date.now() - startedAtMs);
@@ -9534,6 +9967,12 @@ export async function startCollabRuntime(mainHttpPort: number): Promise<CollabRu
             }) {
                 return buildCollabPresenceContextForConnection(data);
             },
+            async beforeHandleMessage(data: {
+                documentName: string;
+                context?: unknown;
+            }) {
+                await assertCurrentCollabWriteBase(data.documentName, data.context);
+            },
             async onLoadDocument(data: {
                 documentName: string;
             }) {
@@ -9543,8 +9982,14 @@ export async function startCollabRuntime(mainHttpPort: number): Promise<CollabRu
                 if (typeof docRow?.access_epoch === 'number' && loadedMeta && loadedMeta.accessEpoch !== docRow.access_epoch) {
                     evictStaleLocalStateForAccessEpoch(slug, docRow.access_epoch);
                 }
-                if (loadedMeta) {
-                    evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, (await getLatestYStateVersion(slug)));
+                const canonicalYStateVersion = docRow?.y_state_version ?? 0;
+                if (await hasStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion)) {
+                    if (hasLocalLiveCollabDoc(slug)) {
+                        await applyPersistedCanonicalStateInPlace(slug, 'version-check');
+                    }
+                    else {
+                        evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion);
+                    }
                 }
                 if (!loadedDocs.has(slug)) {
                     rememberLoadedDoc(slug, await hydrateDocFromDbAsync(slug));
@@ -9581,6 +10026,7 @@ export async function startCollabRuntime(mainHttpPort: number): Promise<CollabRu
                 }
                 if (collabInvalidations.has(data.documentName)) {
                     // Drop any pending persistence and refuse to write stale collab state back to DB.
+                    logClientContributionDroppedOrRejected(data.documentName, 'onStoreDocument', 'room_invalidated');
                     const pending = persistTimers.get(data.documentName);
                     if (pending) {
                         clearTimeout(pending);
@@ -9621,6 +10067,7 @@ export async function startCollabRuntime(mainHttpPort: number): Promise<CollabRu
                 }
                 if (collabInvalidations.has(data.documentName)) {
                     // Ignore changes while we're tearing down the runtime state for this slug.
+                    logClientContributionDroppedOrRejected(data.documentName, 'onChange', 'room_invalidated');
                     return;
                 }
                 if (isRewriteLocked(data.documentName)) {
@@ -9743,6 +10190,12 @@ export async function startCollabRuntimeEmbedded(mainHttpPort: number): Promise<
             }) {
                 return buildCollabPresenceContextForConnection(data);
             },
+            async beforeHandleMessage(data: {
+                documentName: string;
+                context?: unknown;
+            }) {
+                await assertCurrentCollabWriteBase(data.documentName, data.context);
+            },
             async onLoadDocument(data: {
                 documentName: string;
             }) {
@@ -9752,8 +10205,14 @@ export async function startCollabRuntimeEmbedded(mainHttpPort: number): Promise<
                 if (typeof docRow?.access_epoch === 'number' && loadedMeta && loadedMeta.accessEpoch !== docRow.access_epoch) {
                     evictStaleLocalStateForAccessEpoch(slug, docRow.access_epoch);
                 }
-                if (loadedMeta) {
-                    evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, (await getLatestYStateVersion(slug)));
+                const canonicalYStateVersion = docRow?.y_state_version ?? 0;
+                if (await hasStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion)) {
+                    if (hasLocalLiveCollabDoc(slug)) {
+                        await applyPersistedCanonicalStateInPlace(slug, 'version-check');
+                    }
+                    else {
+                        evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion);
+                    }
                 }
                 if (!loadedDocs.has(slug)) {
                     rememberLoadedDoc(slug, await hydrateDocFromDbAsync(slug));
@@ -9789,6 +10248,7 @@ export async function startCollabRuntimeEmbedded(mainHttpPort: number): Promise<
                     return;
                 }
                 if (collabInvalidations.has(data.documentName)) {
+                    logClientContributionDroppedOrRejected(data.documentName, 'onStoreDocument', 'room_invalidated');
                     const pending = persistTimers.get(data.documentName);
                     if (pending) {
                         clearTimeout(pending);
@@ -9828,6 +10288,7 @@ export async function startCollabRuntimeEmbedded(mainHttpPort: number): Promise<
                     return;
                 }
                 if (collabInvalidations.has(data.documentName)) {
+                    logClientContributionDroppedOrRejected(data.documentName, 'onChange', 'room_invalidated');
                     return;
                 }
                 if (isRewriteLocked(data.documentName)) {
@@ -9965,6 +10426,12 @@ export async function startCollabRuntimeAttached(mainHttpServer: HttpServer, mai
                     throw error;
                 }
             },
+            async beforeHandleMessage(data: {
+                documentName: string;
+                context?: unknown;
+            }) {
+                await assertCurrentCollabWriteBase(data.documentName, data.context);
+            },
             async onDisconnect(data: {
                 context?: unknown;
             }) {
@@ -9979,8 +10446,14 @@ export async function startCollabRuntimeAttached(mainHttpServer: HttpServer, mai
                 if (typeof docRow?.access_epoch === 'number' && loadedMeta && loadedMeta.accessEpoch !== docRow.access_epoch) {
                     evictStaleLocalStateForAccessEpoch(slug, docRow.access_epoch);
                 }
-                if (loadedMeta) {
-                    evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, (await getLatestYStateVersion(slug)));
+                const canonicalYStateVersion = docRow?.y_state_version ?? 0;
+                if (await hasStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion)) {
+                    if (hasLocalLiveCollabDoc(slug)) {
+                        await applyPersistedCanonicalStateInPlace(slug, 'version-check');
+                    }
+                    else {
+                        evictStaleLocalStateForPersistedVersion(slug, docRow?.updated_at ?? null, canonicalYStateVersion);
+                    }
                 }
                 if (!loadedDocs.has(slug)) {
                     rememberLoadedDoc(slug, await hydrateDocFromDbAsync(slug));
@@ -10016,6 +10489,7 @@ export async function startCollabRuntimeAttached(mainHttpServer: HttpServer, mai
                     return;
                 }
                 if (collabInvalidations.has(data.documentName)) {
+                    logClientContributionDroppedOrRejected(data.documentName, 'onStoreDocument', 'room_invalidated');
                     const pending = persistTimers.get(data.documentName);
                     if (pending) {
                         clearTimeout(pending);
@@ -10055,6 +10529,7 @@ export async function startCollabRuntimeAttached(mainHttpServer: HttpServer, mai
                     return;
                 }
                 if (collabInvalidations.has(data.documentName)) {
+                    logClientContributionDroppedOrRejected(data.documentName, 'onChange', 'room_invalidated');
                     return;
                 }
                 if (isRewriteLocked(data.documentName)) {
