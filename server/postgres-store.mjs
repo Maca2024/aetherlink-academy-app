@@ -24,7 +24,7 @@ export class PostgresStore {
  }
  async init() {
   const sql=await readFile(new URL('./schema/academy.sql',import.meta.url),'utf8');
-  const migration=`2:${createHash('sha256').update(sql).digest('hex')}`,previousMigration='1:cfd75de0661902abf5fd6d4b2fe2984d7e9228cc111392e96686ed29d228b3e1';
+  const migration=`3:${createHash('sha256').update(sql).digest('hex')}`,previousMigration='2:3fa9bb87a5cfb8efe24eddc2f7fa94ff0657c0d711f5f9e19e41c6f91b12f3d2';
   await this.transaction(async client=>{
    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',[`academy-schema:${this.schema}`]);
    const existing=await client.query('SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname=$1',[this.schema]);
@@ -81,6 +81,8 @@ export class PostgresStore {
   if(!token)return null;return this.transaction(async client=>{const key=hash(token);await client.query('DELETE FROM facilitator_sessions WHERE token_hash=$1 AND expires_at<$2',[key,Date.now()]);const result=await client.query('SELECT sub,email,name,domain FROM facilitator_sessions WHERE token_hash=$1',[key]);return result.rows[0]||null;});
  }
  async facilitatorLogout(token) {if(token)await this.transaction(client=>client.query('DELETE FROM facilitator_sessions WHERE token_hash=$1',[hash(token)]));}
+ async loginStateSave({stateHash,nonce,codeVerifier,expiresAt}) {await this.transaction(async client=>{await client.query('DELETE FROM login_states WHERE expires_at < now()');await client.query('INSERT INTO login_states(state_hash,nonce,code_verifier,expires_at) VALUES ($1,$2,$3,to_timestamp($4/1000.0)) ON CONFLICT (state_hash) DO UPDATE SET nonce=EXCLUDED.nonce,code_verifier=EXCLUDED.code_verifier,expires_at=EXCLUDED.expires_at',[stateHash,nonce,codeVerifier,expiresAt]);});}
+ async loginStateTake(stateHash) {return this.transaction(async client=>{const result=await client.query('DELETE FROM login_states WHERE state_hash=$1 RETURNING nonce,code_verifier,expires_at',[stateHash]);const row=result.rows[0];if(!row)return null;const expiresAt=new Date(row.expires_at).getTime();return expiresAt<Date.now()?null:{nonce:row.nonce,codeVerifier:row.code_verifier,expiresAt};});}
  async create(name,proof,createdBy) {
   return this.transaction(async client=>{
    const id=randomUUID();
