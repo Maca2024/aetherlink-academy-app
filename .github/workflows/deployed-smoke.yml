@@ -18,7 +18,9 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.creator.login == 'vercel[bot]')
+    # Preview deployments sit behind Vercel Authentication and always answer 302,
+    # so automatic smoke runs only for Production; previews can be checked via workflow_dispatch.
+    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.creator.login == 'vercel[bot]' && github.event.deployment.environment == 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
