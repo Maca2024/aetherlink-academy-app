@@ -1271,6 +1271,12 @@ export async function mutateCanonicalDocument(args: CanonicalMutationArgs): Prom
       updatedAt: updated.updated_at,
       yStateVersion: updated.y_state_version,
       accessEpoch: typeof updated.access_epoch === 'number' ? updated.access_epoch : null,
+      // Durable committed candidate only — excludes concurrent client edits that
+      // may already be present on the live ydoc after the FOR UPDATE race window.
+      authoritativeBaseline: {
+        snapshot: Y.encodeStateAsUpdate(persistedCandidateDoc),
+        stateVector: Y.encodeStateVector(persistedCandidateDoc),
+      },
     });
 
     if (liveMarkdown !== authoritativeNextMarkdown || (liveFragmentHash !== null && liveFragmentHash !== expectedFragmentHash)) {

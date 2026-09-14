@@ -6385,8 +6385,12 @@ export async function loadCanonicalYDoc(slug: string, options: {
     if (!slug)
         return null;
     const allowFragmentRecovery = options.allowFragmentRecovery !== false;
+    // Cold non-live loads may prefer a fresh persisted hydrate, but never when an
+    // in-memory loadedDocs authority is already bound — otherwise concurrent client
+    // edits on that resident doc are orphaned and later persistDoc drops them as
+    // superseded_doc_reference (canonical-postgres concurrent-edit contract).
     const preferPersisted = options.preferPersisted === true
-        || (options.liveRequired === false && !hasLocalLiveCollabDoc(slug));
+        || (options.liveRequired === false && !hasLocalLiveCollabDoc(slug) && !loadedDocs.has(slug));
     const skipPersistedHydration = options.skipPersistedHydration === true;
     if (runtime.enabled && !preferPersisted) {
         const existingLiveDoc = getLiveHocuspocusDoc(slug);
@@ -6454,9 +6458,15 @@ export async function registerCanonicalYDocPersistence(slug: string, ydoc: Y.Doc
     updatedAt: string | null;
     yStateVersion: number;
     accessEpoch: number | null;
+    /** Durable committed write-base; when omitted, derived from ydoc. */
+    authoritativeBaseline?: AuthoritativeBaseline | null;
 }): Promise<void> {
     rememberLoadedDoc(slug, ydoc);
-    const authoritativeBaseline = buildAuthoritativeBaseline(ydoc);
+    // Callers that already committed a durable candidate (canonical mutation) should
+    // pass that baseline explicitly. Building from live ydoc alone can fold in
+    // concurrent client edits that landed during the commit, making the next
+    // persistDoc delta empty and dropping those edits.
+    const authoritativeBaseline = meta.authoritativeBaseline ?? buildAuthoritativeBaseline(ydoc);
     setAuthoritativeBaseline(slug, authoritativeBaseline);
     updatesSinceCompaction.set(slug, Math.max(0, meta.yStateVersion - ((await getLatestYSnapshot(slug))?.version ?? 0)));
     refreshLoadedDocDbMeta(slug, ydoc, meta.updatedAt, meta.yStateVersion, meta.accessEpoch, authoritativeBaseline);
