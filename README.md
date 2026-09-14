@@ -13,9 +13,13 @@ node --env-file=.env scripts/start.mjs
 
 Setup installeert de vastgelegde afhankelijkheden en bouwt app plus Proof. De runtime vereist de bestaande Postgres- en Redis-variabelen uit een afgeschermde `.env` of een werkende 1Password-mount. Gebruik bij een mount `--env-file=.env.1password`. Er worden geen model-providercredentials gevraagd. Open na de healthcheck http://127.0.0.1:4317; deze README bewijst niet dat daar momenteel een proces draait.
 
-De lokale facilitatorcode staat in `.data/host-key` (alleen lokaal bekijken). Maak via het startscherm een squad; deel de getoonde squadcode met deelnemers. Gebruik afzonderlijke browserprofielen: het Proof-iframe deelt de sessiecookie binnen één profiel. Praktijk start pas bij vier leden. De timer roteert nooit automatisch. Facilitator kiest fase en driver afzonderlijk.
+De lokale facilitatorcode staat in `.data/host-key` (alleen lokaal bekijken) en blijft beschikbaar als break-glass fallback. Maak via het startscherm een squad; deel de getoonde squadcode met deelnemers. Gebruik afzonderlijke browserprofielen: het Proof-iframe deelt de sessiecookie binnen één profiel. Praktijk start pas bij vier leden. De timer roteert nooit automatisch. Facilitator kiest fase en driver afzonderlijk.
 
-Squads, sessies, Proof-documenten, marks, Yjs-geschiedenis en private snapshots staan in Postgres. Redis synchroniseert live samenwerking en aanwezigheid. `.data/` bewaart alleen lokale ontwikkelsleutels en eventueel historische fixturebestanden. Productie gebruikt gedeelde signing- en facilitatorgeheimen uit de serveromgeving. Stop met Ctrl-C. Browser- en MCP-tokens verlopen na twaalf uur. SSO en accountbeheer zijn niet ingericht.
+Squads, sessies, Proof-documenten, marks, Yjs-geschiedenis en private snapshots staan in Postgres. Redis synchroniseert live samenwerking en aanwezigheid. `.data/` bewaart alleen lokale ontwikkelsleutels en eventueel historische fixturebestanden. Productie gebruikt gedeelde signing- en facilitatorgeheimen uit de serveromgeving. Stop met Ctrl-C. Browser-, MCP- en facilitator-logintokens verlopen na twaalf uur.
+
+## Facilitator-login met Google
+
+Stel `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` en `ACADEMY_FACILITATOR_DOMAINS` samen in om Google Workspace-login te activeren. De domeinlijst is kommagescheiden, bijvoorbeeld `example.nl,school.example`. Registreer `${ACADEMY_PUBLIC_URL}/auth/google/callback` als redirect-URI bij Google. Als een van de drie variabelen ontbreekt, start de loginconfiguratie niet; als alle drie ontbreken, blijft de bestaande interface ongewijzigd en werkt de facilitator-startsleutel als fallback.
 
 ## Eigen Claude Code verbinden
 

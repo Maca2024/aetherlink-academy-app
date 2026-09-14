@@ -14,3 +14,7 @@ test('local runtime still requires Postgres while allowing loopback verification
  assert.doesNotThrow(()=>validateRuntimeEnvironment({DATABASE_URL:fixture.DATABASE_URL,ACADEMY_PUBLIC_URL:'http://127.0.0.1:4321'}));
  assert.throws(()=>validateRuntimeEnvironment({DATABASE_URL:fixture.DATABASE_URL,ACADEMY_STORAGE:'local'}),/requires ACADEMY_STORAGE=postgres/);
 });
+test('Google facilitator login configuration is all-or-nothing',()=>{
+ assert.doesNotThrow(()=>validateRuntimeEnvironment({...fixture,GOOGLE_CLIENT_ID:'client',GOOGLE_CLIENT_SECRET:'secret',ACADEMY_FACILITATOR_DOMAINS:'example.nl'}));
+ for(const key of ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','ACADEMY_FACILITATOR_DOMAINS'])assert.throws(()=>validateRuntimeEnvironment({...fixture,GOOGLE_CLIENT_ID:'client',GOOGLE_CLIENT_SECRET:'secret',ACADEMY_FACILITATOR_DOMAINS:'example.nl',[key]:undefined}),/Google-login vereist/);
+});

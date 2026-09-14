@@ -14,9 +14,20 @@ CREATE TABLE IF NOT EXISTS sessions (
  room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
  person_id text NOT NULL,
  kind text NOT NULL CHECK (kind IN ('browser', 'mcp')),
+ expires_at bigint NOT NULL,
+ display_name text
+);
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS display_name text;
+CREATE INDEX IF NOT EXISTS sessions_person ON sessions(room_id, person_id, kind);
+CREATE TABLE IF NOT EXISTS facilitator_sessions (
+ token_hash text PRIMARY KEY,
+ sub text NOT NULL,
+ email text NOT NULL,
+ name text NOT NULL,
+ domain text NOT NULL,
  expires_at bigint NOT NULL
 );
-CREATE INDEX IF NOT EXISTS sessions_person ON sessions(room_id, person_id, kind);
+CREATE INDEX IF NOT EXISTS facilitator_sessions_expiry ON facilitator_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS requests (
  room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
  person_id text NOT NULL,

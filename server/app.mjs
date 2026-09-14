@@ -1,7 +1,7 @@
 import express from 'express';
 import http from 'node:http';
 import httpProxy from 'http-proxy';
-import {randomUUID,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {readFileSync,existsSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {Store,secret,hash,fail} from './store.mjs';
@@ -11,17 +11,20 @@ import {createAcademyMcpServer} from './mcp-tools.mjs';
 import {createMcpHandler,validateHostHeader} from '@modelcontextprotocol/server';
 import {toNodeHandler} from '@modelcontextprotocol/node';
 import {lessons,mission,initialDocument,searchKnowledge} from './content.mjs';
+import {createGoogleSso,readLoginState,signLoginState} from './google-sso.mjs';
 const text=(v,max=4000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail(400,`Vul tekst in (maximaal ${max} tekens).`);return v.trim();};
-const cookie=req=>req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith('academy='))?.slice(8);
+const namedCookie=(req,name)=>{const value=req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${name}=`))?.slice(name.length+1);if(value===undefined)return;try{return decodeURIComponent(value);}catch{return;}};
+const cookie=req=>namedCookie(req,'academy');
 const bearer=req=>req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):null;
-export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4400',root=process.cwd(),hostKey,publicBaseUrl=process.env.ACADEMY_PUBLIC_URL||`http://127.0.0.1:${process.env.PORT||4317}`}={}){
+export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4400',root=process.cwd(),hostKey,publicBaseUrl=process.env.ACADEMY_PUBLIC_URL||`http://127.0.0.1:${process.env.PORT||4317}`,googleClientId=process.env.GOOGLE_CLIENT_ID,googleClientSecret=process.env.GOOGLE_CLIENT_SECRET,facilitatorDomains=process.env.ACADEMY_FACILITATOR_DOMAINS,signingSecret=process.env.PROOF_COLLAB_SIGNING_SECRET,fetchImpl=fetch}={}){
  const publicUrl=new URL(publicBaseUrl);if(!['http:','https:'].includes(publicUrl.protocol)||publicUrl.username||publicUrl.password||publicUrl.search||publicUrl.hash||publicUrl.pathname!=='/')throw Error('ACADEMY_PUBLIC_URL moet een HTTP(S)-origin zonder pad of credentials zijn.');
  const store=repository||new LocalStore(dir);const proof=new Proof(proofBase);const app=express();const proxy=httpProxy.createProxyServer({target:proofBase,ws:true});
  const token=req=>bearer(req)||cookie(req);
  const browser=req=>store.auth(bearer(req)||cookie(req),'browser');
  const suggestionReviewer=({r,s})=>{if(s.personId!=='facilitator'&&s.personId!==r.members[r.driver]?.id)fail(403,'Driver of facilitator beslist over documentvoorstellen.');};
- const hostFile=path.join(dir,'host-key');if(!hostKey){if(!existsSync(hostFile))writeFileSync(hostFile,secret(),{mode:0o600});hostKey=readFileSync(hostFile,'utf8').trim();}
- const facilitatorKey=req=>{const key=Buffer.from(hash(req.body.hostKey||''));if(!timingSafeEqual(key,Buffer.from(hash(hostKey))))fail(403,'Ongeldige facilitator-startsleutel.');};
+ const hostFile=path.join(dir,'host-key');if(hostKey===undefined||hostKey===null){if(!existsSync(hostFile))writeFileSync(hostFile,secret(),{mode:0o600});hostKey=readFileSync(hostFile,'utf8').trim();}if(!hostKey.trim())throw new Error('ACADEMY_HOST_KEY of .data/host-key is leeg.');
+ const googleSso=createGoogleSso({clientId:googleClientId,clientSecret:googleClientSecret,allowedDomains:facilitatorDomains,publicUrl:publicUrl.origin,fetchImpl}),authSecure=publicUrl.protocol==='https:',loginSecret=createHmac('sha256',signingSecret||hostKey).update('academy-login-state').digest();
+ const requireFacilitator=async req=>{const key=Buffer.from(hash(req.body?.hostKey||''));if(timingSafeEqual(key,Buffer.from(hash(hostKey))))return null;const identity=await store.facilitator(namedCookie(req,'academy-facilitator'));if(identity)return identity;fail(403,'Ongeldige facilitator-startsleutel.');};
  app.disable('x-powered-by');app.use((req,res,next)=>{res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');const origin=req.headers.origin;if(origin&&origin!==publicUrl.origin&&origin!==`${req.protocol}://${req.headers.host}`)return res.status(403).json({error:'Andere origin niet toegestaan.'});next();});
  proxy.on('error',(_e,_req,res)=>{if(res.writeHead)res.writeHead(502,{'content-type':'application/json'}).end(JSON.stringify({error:'Proof is niet bereikbaar.'}));else res.destroy();});
  // Proof retains the single authoritative Yjs document. Only authenticated room paths pass this gateway.
@@ -38,13 +41,19 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   }catch(e){res.status(e.status||500).json({error:e.message});}
  });
  app.use(express.json({limit:'64kb'}));
- const buckets=new Map();app.use(['/game','/mcp'],(req,res,next)=>{const k=req.ip;const b=buckets.get(k)||{t:Date.now(),n:0};if(Date.now()-b.t>60000){b.t=Date.now();b.n=0;}b.n++;buckets.set(k,b);if(b.n>1500)return res.status(429).json({error:'Te veel verzoeken. Wacht even.'});next();});
+ const buckets=new Map();app.use(['/game','/mcp','/auth'],(req,res,next)=>{const k=req.ip;const b=buckets.get(k)||{t:Date.now(),n:0};if(Date.now()-b.t>60000){b.t=Date.now();b.n=0;}b.n++;buckets.set(k,b);if(b.n>1500)return res.status(429).json({error:'Te veel verzoeken. Wacht even.'});next();});
  const wrap=fn=>async(req,res,next)=>{try{await fn(req,res);}catch(e){next(e);}};
  const setSession=(res,result)=>{res.cookie('academy',result.token,{httpOnly:true,sameSite:'strict',secure:publicUrl.protocol==='https:',path:'/'});res.json(result);};
- app.post('/game/create',wrap(async(req,res)=>{facilitatorKey(req);const name=text(req.body.name,60);const p=await proof.create(initialDocument,name+' — Onze intent');setSession(res,await store.create(name,p));}));
+ const loginCookie={httpOnly:true,sameSite:'lax',secure:authSecure,path:'/'},loginError=(res,code)=>{res.clearCookie('academy-login',loginCookie);console.warn(`[academy] Google-login mislukt: ${code}`);res.redirect(302,`/?login_error=${code}`);};
+ app.get('/auth/google/start',wrap(async(_req,res)=>{if(!googleSso.enabled)return loginError(res,'disabled');try{const state=randomBytes(32).toString('base64url'),nonce=randomBytes(32).toString('base64url'),codeVerifier=randomBytes(32).toString('base64url'),codeChallenge=createHash('sha256').update(codeVerifier).digest('base64url');const location=await googleSso.startUrl({state,nonce,codeChallenge});res.cookie('academy-login',signLoginState({state,nonce,codeVerifier,expiresAt:Date.now()+10*60*1000},loginSecret),{...loginCookie,maxAge:10*60*1000});res.redirect(302,location);}catch(e){loginError(res,['state','domain','token','verify','disabled'].includes(e.code)?e.code:'verify');}}));
+ app.get('/auth/google/callback',wrap(async(req,res)=>{if(!googleSso.enabled)return loginError(res,'disabled');try{const loginState=readLoginState(namedCookie(req,'academy-login'),loginSecret),identity=await googleSso.handleCallback(req.query,loginState),token=await store.facilitatorLogin(identity);res.clearCookie('academy-login',loginCookie);res.cookie('academy-facilitator',token,{...loginCookie,maxAge:12*60*60*1000});res.redirect(302,'/?facilitator=1');}catch(e){loginError(res,['state','domain','token','verify','disabled'].includes(e.code)?e.code:'verify');}}));
+ app.post('/auth/logout',wrap(async(req,res)=>{await store.facilitatorLogout(namedCookie(req,'academy-facilitator'));res.clearCookie('academy-facilitator',loginCookie);res.status(204).end();}));
+ app.get('/game/config',(_req,res)=>res.json({googleSso:googleSso.enabled}));
+ app.get('/game/facilitator/me',wrap(async(req,res)=>{const identity=await store.facilitator(namedCookie(req,'academy-facilitator'));if(!identity)return res.status(401).json({error:'Geen geldige facilitator-login.'});res.json({email:identity.email,name:identity.name});}));
+ app.post('/game/create',wrap(async(req,res)=>{const identity=await requireFacilitator(req),name=text(req.body.name,60),p=await proof.create(initialDocument,name+' — Onze intent');setSession(res,await store.create(name,p,identity&&{email:identity.email,name:identity.name}));}));
  app.post('/game/join',wrap(async(req,res)=>setSession(res,await store.join(text(req.body.code,15),text(req.body.name,50)))));
- app.post('/game/facilitator/overview',wrap(async(req,res)=>{facilitatorKey(req);res.json(await store.overview());}));
- app.post('/game/facilitator/attach',wrap(async(req,res)=>{facilitatorKey(req);setSession(res,await store.attachFacilitator(text(req.body.roomId,60)));}));
+ app.post('/game/facilitator/overview',wrap(async(req,res)=>{await requireFacilitator(req);res.json(await store.overview());}));
+ app.post('/game/facilitator/attach',wrap(async(req,res)=>{const identity=await requireFacilitator(req);setSession(res,await store.attachFacilitator(text(req.body.roomId,60),identity?.name));}));
  app.post('/game/logout',wrap(async(req,res)=>{await store.logout(token(req));res.clearCookie('academy',{path:'/'});res.json({ok:true});}));
  app.get('/game/suggestions',wrap(async(req,res)=>{const {r}=await browser(req);const d=await proof.state(r);res.json(Object.entries(d.marks||{}).filter(([,m])=>['insert','replace','delete'].includes(m.kind)).map(([id,m])=>({id,...m})));}));
  app.post('/game/suggestion-review',wrap(async(req,res)=>{const {r,s}=await browser(req);suggestionReviewer({r,s});if(!['accept','reject'].includes(req.body.decision))fail(400,'Ongeldig besluit.');const id=text(req.body.id,100);const result=await proof.request(`/documents/${r.proof.slug}/ops`,r.proof.editor,{type:'suggestion.'+req.body.decision,markId:id,by:`human:${s.personId}`},text(req.body.requestId,100));res.json(result);}));
