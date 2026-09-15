@@ -1,4 +1,5 @@
 import express from 'express';
+import {agentInstructions} from './agent-setup.mjs';
 import {dayProgress,debrief,exportDebrief} from './progress.mjs';
 import http from 'node:http';
 import httpProxy from 'http-proxy';
@@ -74,6 +75,7 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.post('/game/help',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({p})=>{if(!p)fail(400,'De facilitator heeft geen solo-profiel.');p.help=!p.help;return {help:p.help};}))));
  app.post('/game/quiz',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(400,'Alleen deelnemers.');const pack=getDayPack(r.day);if(!pack)fail(400,`Geen contentpakket voor supportdag ${r.day}.`);const answers=req.body?.answers,expected=pack.quiz.questions.length;if(!Array.isArray(answers)||answers.length!==expected)fail(400,`Beantwoord alle ${expected} vragen.`);if(answers.some((answer,index)=>!Number.isInteger(answer)||answer<0||answer>=pack.quiz.questions[index].options.length))fail(400,'Gebruik een geldige optie voor elke vraag.');const score=answers.filter((answer,index)=>answer===pack.quiz.answers[index]).length;const at=new Date().toISOString();p.route=score<=1?'guided':score===2?'standard':'stretch';p.quiz={score,at,day:r.day};p.progressByDay=p.progressByDay||{};p.progressByDay[String(r.day)]={...(p.progressByDay[String(r.day)]||{}),quizScore:score,route:p.route,quizAt:at};return {score,route:p.route,day:r.day,note:'Voorlopige hulpkeuze op basis van 3 scenario’s; geen vaardigheidsbewijs of permanent label.'};}))));
  app.post('/game/route',wrap(async(req,res)=>{if(!['guided','standard','stretch'].includes(req.body.route))fail(400,'Ongeldige hulpkeuze.');await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(400,'Alleen deelnemers.');p.route=req.body.route;p.progressByDay??={};p.progressByDay[String(r.day)]={...p.progressByDay[String(r.day)],route:p.route};});res.json({ok:true});}));
+ app.post('/game/agent-setup',wrap(async(req,res)=>{const {r,p}=await browser(req);if(!p)fail(403,'Neem als deelnemer deel om je eigen Claude te verbinden.');if(publicUrl.protocol!=='https:')fail(409,'De agentkoppeling is beschikbaar op de publieke HTTPS-versie.');const access=await store.rotateMcpToken(token(req));res.json({instructions:agentInstructions({origin:publicUrl.origin,roomId:r.id,participantId:p.id,accessToken:access.token}),expiresAt:Date.now()+12*60*60*1000,participantId:p.id,roomId:r.id});}));
  app.post('/game/mcp-token',wrap(async(req,res)=>res.json(await store.rotateMcpToken(token(req)))));
  function reviewer({r,s}){if(s.personId!=='facilitator'&&s.personId!==r.members[r.driver]?.id)fail(403,'Driver of facilitator beoordeelt het bewijs.');}
  async function commentQuote(r){const state=await proof.state(r);const quote=state.markdown.split('\n').find(line=>line.trim())?.replace(/^#+\s*/,'').trim();if(!quote)fail(409,'Het document heeft nog geen tekst voor commentaar.');return quote;}
@@ -104,7 +106,7 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   res.json(await store.completeRequest(token(req),'handoff',key,fingerprint,context=>{context.r.handoffs.push(h);return h;}));
  }));
  async function executeMcp(token,tool,input){const a=await store.auth(token,'mcp');const {r,p}=a;if(!p)fail(403,'Geen deelnemer.');let result;
-  switch(tool){case 'get_mission':{const pack=getDayPack(r.day);result={mission:pack?.mission||mission,day:r.day,phase:r.phase,route:p.route,role:r.members[r.driver]?.id===p.id?'Driver':'Navigator',coach:'Leg begrippen uit, citeer les-IDs, pas hints aan de hulpkeuze aan. Lees eerst de gedeelde intent. Geen browserchat of model-API vanuit de game.'};break;}
+  switch(tool){case 'get_mission':{const pack=getDayPack(r.day);result={session:{roomId:r.id,participantId:p.id,participantName:p.name,squadName:r.name},mission:pack?.mission||mission,day:r.day,phase:r.phase,route:p.route,role:r.members[r.driver]?.id===p.id?'Driver':'Navigator',coach:'Leg begrippen uit, citeer les-IDs, pas hints aan de hulpkeuze aan. Lees eerst de gedeelde intent. Geen browserchat of model-API vanuit de game.'};break;}
   case 'get_document':result=await proof.state(r);break;
   case 'search_knowledge':result={lessons:searchKnowledge(String(input.query||''))};break;
   case 'submit_evidence':result=await evidence(token,input);break;

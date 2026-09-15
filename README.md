@@ -25,13 +25,9 @@ Stel `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` en `ACADEMY_FACILITATOR_DOMAINS`
 
 ## Eigen Claude Code verbinden
 
-Open **Mijn leercoach → Claude Code verbinden**. De server biedt Streamable HTTP MCP op `/mcp`; remote gebruik heeft geen lokale adapterbestanden nodig. Maak een persoonlijke gametoken. De tekst is selecteerbaar; als kopiëren wordt geweigerd, kies **Selecteer configuratie** en kopieer handmatig. Een aangemaakte token blijft in deze browsersessie beschikbaar na navigeren/herladen. Een vervangende token trekt de vorige direct in.
+Open als deelnemer **Mijn leercoach** en klik **Kopieer voor je Claude**. Plak de complete privé-instructie in je eigen ingelogde Claude Code. De app regelt tijdelijke toegang voor de huidige deelnemer en squad; de deelnemer hoeft geen API-key, token of configuratie samen te stellen. Herhaald kopiëren in dezelfde browsersessie hergebruikt de instructie tot deze verloopt.
 
-Zodra er een geconfigureerde HTTPS-deployment is, toont de app het juiste `claude mcp add --transport http --scope local academy … --header …` commando. De localhost-preview meldt expliciet dat hij geen publieke remote dienst is. De token kan via een stille terminalprompt in een tijdelijke shellvariabele worden ingevoerd; het commando bevat dan geen tokenliteral in de shellgeschiedenis. Claude Code bewaart zijn eigen serverconfiguratie lokaal. Houd die privé. Zie de [officiële Claude Code MCP-documentatie](https://code.claude.com/docs/en/mcp).
-
-Laat Claude Code ingelogd met je eigen account; controleer daarna `/mcp`. Tools: `get_mission`, `get_document`, `search_knowledge`, `submit_evidence`, `suggest_document`. Iedere HTTP-aanroep verifieert de persoonlijke token en bepaalt de squad op de server. Browsertokens, ingetrokken tokens, ongeldige origins en afwijkende hosts worden geweigerd. De MCP-client kan geen driver wisselen, timer bedienen of voorstellen accepteren. Een geslaagde toolaanroep bewijst geen specifieke Claude-login.
-
-De oude stdio-adapter blijft voor lokale ontwikkeling beschikbaar onder de ingeklapte ontwikkelinstellingen. Voor een lokale HTTP-test kan Claude Code op dezelfde computer rechtstreeks naar `http://127.0.0.1:4317/mcp` verbinden met een persoonlijke token.
+Claude configureert de remote MCP in lokale projectscope, controleert de sessie-identiteit via `get_mission` en leest daarna het gedeelde document en lesmateriaal. Mogelijk vraagt Claude om toestemming of een herstart om nieuwe tools te laden. De UI meldt alleen een geslaagde MCP-aanroep na werkelijk gebruik, niet na kopiëren. Clipboardblokkering geeft een selecteerbaar alternatief. De instructie bevat tijdelijke privétoegang en hoort uitsluitend in de eigen agent.
 
 ## Twee eigen accounts: nog uit te voeren
 
