@@ -43,7 +43,7 @@ function Join({ready,action,busy,error,joined}){
  const nameRef=useRef(null);
  const roleRef=useRef(null);
  useEffect(()=>{if(code)nameRef.current?.focus();else roleRef.current?.focus();},[]);
- useEffect(()=>{let active=true;(async()=>{try{const config=await api('config');if(!active)return;setGoogleSso(config.googleSso);if(params.get('facilitator')==='1'||config.googleSso)try{const identity=await api('facilitator/me');if(active){setFacilitator(identity);setMode('create');}}catch{}}catch{}})();return()=>{active=false;};},[]);
+ useEffect(()=>{let active=true;(async()=>{try{const config=await api('config');if(!active)return;setGoogleSso(config.googleSso);if(params.get('facilitator')==='1'||config.googleSso)try{const identity=await api('facilitator/me');if(active){setFacilitator(identity);if(!params.get('code'))setMode('create');}}catch{}}catch{}})();return()=>{active=false;};},[]);
  const create=mode==='create',facilitatorOverview=mode==='overview',participant=!create&&!facilitatorOverview;
  const setRole=next=>{setMode(next);setOverview(null);};
  const plainError=error&&(
