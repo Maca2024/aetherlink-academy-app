@@ -1,6 +1,6 @@
 # Progress — AetherLink Academy
 
-Last updated: 2026-09-16 (Europe/Amsterdam)
+Last updated: 2026-09-16 (Europe/Amsterdam) — AET-10 i18n
 
 ## Live
 
@@ -21,6 +21,7 @@ Last updated: 2026-09-16 (Europe/Amsterdam)
 | AET-7 | Epic B day packs / day 3 n8n (PR #13) | In Review |
 | AET-8 | Epic C UI/UX polish | Backlog |
 | AET-9 | Epic E verification / docs / Notion sync | Backlog |
+| AET-10 | i18n English default + EN/NL toggle | In Progress |
 
 ## Blocked / parked
 
