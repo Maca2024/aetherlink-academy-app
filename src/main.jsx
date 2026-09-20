@@ -88,24 +88,62 @@ function App(){
 function ClassroomOverlay({room,onClose}){
   const t=useT();
   const frameRef=useRef(null);
+  const shellRef=useRef(null);
   useEffect(()=>{
     const prevOverflow=document.body.style.overflow;
+    const returnFocusTo=document.activeElement;
     document.body.style.overflow='hidden';
     try{if(!navigator.webdriver)document.documentElement.requestFullscreen?.();}catch{}
     const exit=()=>{
       try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}
       onClose();
     };
-    const onKey=e=>{if(e.key==='Escape'){e.preventDefault();exit();}};
+    const focusable=()=>[...(shellRef.current?.querySelectorAll('button,iframe,[href],[tabindex]:not([tabindex="-1"])')||[])].filter(el=>!el.disabled);
+    // Walk to the next element that actually accepts focus: an iframe is only
+    // tabbable when its content is, so a fixed first/last pair is not reliable.
+    const step=(items,active,back)=>{
+      const n=items.length;
+      let i=items.indexOf(active);
+      if(i===-1)i=back?0:n-1;
+      for(let k=0;k<n;k++){
+        i=back?(i-1+n)%n:(i+1)%n;
+        items[i].focus();
+        if(document.activeElement===items[i])return true;
+      }
+      return false;
+    };
+    const onKey=e=>{
+      if(e.key==='Escape'){e.preventDefault();exit();return;}
+      if(e.key!=='Tab')return;
+      // The deck covers the whole app, so focus behind it is invisible: drive Tab
+      // ourselves instead of letting it reach the room controls underneath.
+      const items=focusable();
+      if(!items.length)return;
+      e.preventDefault();
+      step(items,document.activeElement,e.shiftKey);
+    };
+    // Safety net for focus we cannot see leaving: once it is inside the
+    // cross-origin deck, its Tab keys never reach this document, so the browser
+    // can hand focus back to whatever follows the overlay. Pull it in again.
+    const onFocusIn=e=>{
+      const shell=shellRef.current;
+      if(!shell||shell.contains(e.target))return;
+      const items=focusable();
+      if(items.length)step(items,null,false);
+    };
+    document.addEventListener('focusin',onFocusIn);
     window.addEventListener('keydown',onKey);
+    focusable()[0]?.focus();
     return()=>{
       window.removeEventListener('keydown',onKey);
+      document.removeEventListener('focusin',onFocusIn);
       document.body.style.overflow=prevOverflow;
       try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}
+      returnFocusTo?.focus?.();
     };
   },[onClose]);
   const exit=()=>{try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}onClose();};
-  return <div className="classroom-overlay" role="dialog" aria-modal="true" aria-label={t('classroom.title')} data-testid="classroom-overlay">
+  return <div ref={shellRef} className="classroom-overlay" role="dialog" aria-modal="true" aria-label={t('classroom.title')} data-testid="classroom-overlay">
     <div className="classroom-chrome">
       <div className="classroom-chrome-left">
         <Presentation size={18}/>
