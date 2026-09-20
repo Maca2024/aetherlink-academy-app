@@ -1,6 +1,6 @@
 # Progress — AetherLink Academy
 
-Last updated: 2026-09-16 (Europe/Amsterdam) — AET-12 thin slice + AET-18 Vercel takedown guide
+Last updated: 2026-09-20 (Europe/Amsterdam) — Slide decks (Effect-TS port of agent-native slides), AET-12 thin slice + AET-18 Vercel takedown guide
 
 ## Live
 
@@ -32,6 +32,8 @@ Last updated: 2026-09-16 (Europe/Amsterdam) — AET-12 thin slice + AET-18 Verce
 - **Google facilitator SSO on Hetzner:** needs redirect URIs + env for `91.99.78.17:4317` (or future HTTPS domain) — see AET-6
 
 ## Recently decided
+
+- Slide decks land as an Effect-TS module (`server/slides`, see `docs/SLIDES.md`) with HTTP + MCP tools; schema migration bumped to 4 (adds `decks`). Ship review-first; Postgres layer test needs `DATABASE_URL`.
 
 - Academy Linear SoT = https://linear.app/aetherlink (not `aetherlink-academy`)
 - On-box everything for PG/Redis on the Academy VPS
