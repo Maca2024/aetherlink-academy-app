@@ -4,7 +4,7 @@ import {Users,BookOpen,Compass,Target,Sparkles,ClipboardCheck,Sun,Moon,ArrowRigh
 import {api,authApi,getToken,saveSession} from './api';
 import {Knowledge,Coach,Lesson,Solo,Review,Route,Debrief} from './panels';
 import {I18nProvider,LanguageToggle,useT,useI18n} from './i18n';
-import {classroomEmbedUrl} from './classroom';
+import {classroomEmbedUrl,CLASSROOM_SANDBOX} from './classroom';
 import './style.css';
 
 const phases=['Plan','Design','Build','Test','Deploy','Maintain'];
@@ -115,7 +115,7 @@ function ClassroomOverlay({room,onClose}){
       </div>
       <button type="button" className="classroom-exit" onClick={exit} aria-label={t('classroom.exit')}><X size={16}/>{t('classroom.exitShort')}</button>
     </div>
-    <iframe ref={frameRef} className="classroom-frame" src={classroomEmbedUrl(room.day)} title={t('classroom.frameTitle')} allow="fullscreen" allowFullScreen/>
+    <iframe ref={frameRef} className="classroom-frame" src={classroomEmbedUrl(room.day)} title={t('classroom.frameTitle')} sandbox={CLASSROOM_SANDBOX} allow="fullscreen" allowFullScreen/>
   </div>;
 }
 
