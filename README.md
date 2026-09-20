@@ -1,6 +1,6 @@
 # AetherLink Academy
 
-Nederlandse leeromgeving met een echt, doorlopend Proof-document, squads van 4–5, één driver, facilitatorbediening, privé-quiz, brongebonden kennisbank en bewijs/review/handoff. Eigen Claude Code werkt via een beperkte MCP-bridge. De app bevat geen modelchat en vraagt geen Anthropic API-key.
+Nederlandse leeromgeving met een echt, doorlopend Proof-document, flexibele squads (standaard ~4–5, soft max ~12), één driver, facilitatorbediening, privé-quiz, brongebonden kennisbank en bewijs/review/handoff. Eigen Claude Code werkt via een beperkte MCP-bridge. De app bevat geen modelchat en vraagt geen Anthropic API-key.
 
 Zie [de vijf supportdagen](docs/LEARNING-ROUTE.md) voor inhoud, voortgang en de grenzen van de oefeningen.
 
@@ -35,7 +35,7 @@ Na de HTTPS-deployment verbinden twee deelnemers ieder hun eigen Claude Code met
 
 ## Docker en Vercel
 
-`Dockerfile` en `Dockerfile.vercel` bouwen app plus Proof. De lokale Compose-configuratie vereist runtimecredentials en bewaart ontwikkelsleutels in een volume. Duurzame applicatietoestand staat extern. Docker is hier niet beschikbaar; de aparte CI/CD-taak verzorgt een echte build. De Vercel-startguard blijft actief tot de gedeelde runtime is geverifieerd. Zie [deploymentstatus](docs/DEPLOYMENT.md).
+`Dockerfile` en `Dockerfile.vercel` bouwen app plus Proof. De lokale Compose-configuratie vereist runtimecredentials en bewaart ontwikkelsleutels in een volume. Duurzame applicatietoestand staat extern. Docker is hier niet beschikbaar; de aparte CI/CD-taak verzorgt een echte build. De Vercel-startguard blijft actief tot de gedeelde runtime is geverifieerd. Zie [deploymentstatus](docs/DEPLOYMENT.md). Domain cutover runbook: [GoDaddy → academy.aetherlink.ai](docs/domain-godaddy.md). Vercel retire guide (no delete without Ryan GO): [Vercel Academy takedown](docs/vercel-academy-takedown.md).
 
 ## Controles en grenzen
 
@@ -46,7 +46,7 @@ node --test starter/status.test.mjs
 
 De eerdere integratie- en samenwerkingstests vereisen een draaiende server via `ACADEMY_URL` (standaard poort 4317). Ze maken eigen testsquads. Gerichte databasechecks vereisen de bestaande Postgres-omgeving. `tests/distributed.test.mjs` start zelf twee echte app/Proof-processen wanneer `ACADEMY_DISTRIBUTED_TEST=1` is ingesteld; gebruik daarvoor exclusief poorten 4351/4352 en 4451/4452. Het testcommando neemt ook de TypeScript canonical-test mee.
 
-De oorspronkelijke rendererhang is lokaal opgelost en opnieuw in de browser gecontroleerd. Publieke acceptatie en de volledige gedistribueerde regressie zijn nog niet geslaagd. [PROGRESS.md](PROGRESS.md) bevat de actuele resultaten en beperkingen. Het [gedateerde browserrapport](../demo/VERIFICATION.md) is een werkmapartefact buiten deze repository. Zie ook [architectuur](docs/ARCHITECTURE.md).
+De oorspronkelijke rendererhang is lokaal opgelost en opnieuw in de browser gecontroleerd. Publieke acceptatie en de volledige gedistribueerde regressie zijn nog niet geslaagd. [progress.md](progress.md) bevat de actuele resultaten en beperkingen. Het [gedateerde browserrapport](../demo/VERIFICATION.md) is een werkmapartefact buiten deze repository. Zie ook [architectuur](docs/ARCHITECTURE.md).
 
 Dit is een lokaal pilot-MVP: de driverrol stuurt de werkvorm, geen exclusief schrijfrecht in Proof. Alle menselijke editors kunnen het document bewerken. Namen/squadcodes zijn geen geverifieerde identiteit. De tien ingebouwde lessen zijn een compacte MVP-inhoud; het volledige externe curriculumdocument is niet geïmporteerd. Enkele native Proof-bedieningen zijn Engels. Liveblocks is beoordeeld maar niet geïntegreerd. De broncoderepository is [RyanLisse/aetherlink-academy-app](https://github.com/RyanLisse/aetherlink-academy-app) en de publieke deployment draait op https://aetherlink-academy-app.vercel.app in Vercel-regio fra1. Deployed acceptatie wordt bewezen met `scripts/deployed-mcp-check.mjs` en `scripts/deployed-browser-acceptance.mjs`; zie [handleiding deelnemer](docs/handleiding-deelnemer.md) en [handleiding facilitator](docs/handleiding-facilitator.md).
 

@@ -26,9 +26,21 @@ test('facilitator classroom UI hooks exist in main.jsx', async () => {
   assert.match(main, /ClassroomOverlay/);
   assert.match(main, /onOpenClassroom/);
   assert.match(main, /classroomOpen/);
-  assert.match(main, />Classroom</);
-  assert.match(main, /Exit Classroom/);
+  assert.match(main, /classroom\.title/);
+  assert.match(main, /classroom\.exit/);
   assert.match(main, /keydown/);
   assert.match(main, /Escape/);
   assert.doesNotMatch(main, /vendor\/proof-sdk/);
+});
+
+test('classroom chrome is translated in both catalogs', async () => {
+  const {readFileSync} = await import('node:fs');
+  const en = JSON.parse(readFileSync(new URL('../src/i18n/en.json', import.meta.url), 'utf8'));
+  const nl = JSON.parse(readFileSync(new URL('../src/i18n/nl.json', import.meta.url), 'utf8'));
+  for (const key of ['classroom.title', 'classroom.open', 'classroom.exit', 'classroom.exitShort', 'classroom.dayHint', 'classroom.frameTitle']) {
+    assert.ok(en[key], `missing EN ${key}`);
+    assert.ok(nl[key], `missing NL ${key}`);
+  }
+  assert.match(en['classroom.dayHint'], /\{day\}/);
+  assert.match(nl['classroom.dayHint'], /\{day\}/);
 });

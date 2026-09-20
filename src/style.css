@@ -61,3 +61,8 @@
  .classroom-chrome{flex-wrap:wrap;gap:8px}
  .classroom-room-hint{max-width:100%}
 }
+.welcome-actions{display:flex;align-items:center;gap:10px}
+.language-toggle{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid color-mix(in srgb,var(--text-color,#e3ecfa) 18%,transparent);font-size:12px;font-weight:600;letter-spacing:.04em}
+.language-toggle button{background:transparent;border:0;color:inherit;opacity:.55;cursor:pointer;padding:2px 4px;font:inherit}
+.language-toggle button.selected,.language-toggle button[aria-pressed="true"]{opacity:1}
+.language-toggle span{opacity:.35}
