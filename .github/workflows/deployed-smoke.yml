@@ -1,12 +1,16 @@
 name: Academy deployed smoke
 
+# Academy deploys to Hetzner through "Deploy Hetzner Academy", which does not
+# create GitHub deployments, so there is no deployment_status to react to.
+# Run this by hand after a deploy (or wire it to workflow_run when the Hetzner
+# deploy is trusted to gate on it).
 on:
-  deployment_status:
   workflow_dispatch:
     inputs:
       url:
-        description: Immutable Academy HTTPS deployment URL
-        required: true
+        description: Academy base URL to smoke (defaults to the Hetzner box)
+        required: false
+        default: http://91.99.78.17:4317
         type: string
       revision:
         description: Full deployed source commit SHA
@@ -18,9 +22,6 @@ permissions:
 
 jobs:
   smoke:
-    # Preview deployments sit behind Vercel Authentication and always answer 302,
-    # so automatic smoke runs only for Production; previews can be checked via workflow_dispatch.
-    if: github.event_name == 'workflow_dispatch' || (github.event.deployment_status.state == 'success' && github.event.deployment.creator.login == 'vercel[bot]' && github.event.deployment.environment == 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -33,10 +34,8 @@ jobs:
           package-manager-cache: false
       - name: Verify deployed identity, readiness and authentication
         env:
-          # Vercel Authentication (Standard Protection) guards the immutable
-          # deployment URL, so automatic production smoke targets the public alias.
-          SMOKE_BASE_URL: ${{ inputs.url || (github.event.deployment.environment == 'Production' && 'https://aetherlink-academy-app.vercel.app') || github.event.deployment_status.environment_url }}
-          EXPECTED_REVISION: ${{ inputs.revision || github.event.deployment.sha }}
+          SMOKE_BASE_URL: ${{ inputs.url }}
+          EXPECTED_REVISION: ${{ inputs.revision }}
         run: node scripts/deployed-smoke.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

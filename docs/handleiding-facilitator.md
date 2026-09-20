@@ -9,7 +9,7 @@ Als "Inloggen met Google" op het aanmeldscherm staat, meld je aan met je Google 
 ## Voorbereiding
 
 1. Open de gedeployde applicatie in een browser.
-   Gebruik bijvoorbeeld https://aetherlink-academy-app.vercel.app.
+   Gebruik het Hetzner-adres http://91.99.78.17:4317 (of https://academy.aetherlink.ai zodra de domeincutover live is).
 2. Vraag de startsleutel uit de serveromgeving alleen op als je de break-glass fallback nodig hebt.
    De waarde staat lokaal in `.data/host-key` of in de serveromgeving.
    Print of deel de waarde nooit.

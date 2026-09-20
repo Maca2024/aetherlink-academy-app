@@ -21,7 +21,7 @@ Support Worldline / AetherLink Wave workshops (and related academy delivery) wit
 - **Source of truth for code:** this GitHub repo (`main`)
 - **Production runtime (current):** Hetzner CX33 sibling Docker (on-box TLS Postgres + Redis); `main` push rebuilds via GitHub Actions
 - **Control plane present but not shipping:** Openship on the same box (needs a custom domain before edge/auto-deploy)
-- **Vercel Hobby:** paused after Fluid usage limits — do not rely on it until explicitly revived
+- **Vercel:** retired for Academy (migrated to Hetzner). Apex/`www` marketing DNS may still use Vercel — leave those alone
 
 ## Product bar (Done)
 

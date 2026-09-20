@@ -44,6 +44,6 @@ At review time: Free has 3,000 collaboration minutes and can pause over-limit fe
 
 Streamable HTTP `/mcp` gebruikt stateless SDK-transports met authenticatie per request en opnieuw per toolcall. De bestaande stdio-adapter deelt dezelfde vijf tooldefinities. `/game/connection` levert de geconfigureerde origin en onderscheidt localhost van ingestelde HTTPS; externe bereikbaarheid is apart te verifiëren. Tokens blijven squadgebonden, twaalf uur geldig en revocable. OAuth is niet geïmplementeerd.
 
-`scripts/start.mjs` zet snapshots onder ACADEMY_DATA en kopieert bestaande snapshots zonder nieuwere exemplaren te overschrijven. De supervisor stopt bij uitval van Proof en wacht bij SIGTERM op het kindproces. De nieuwe Dockerconfiguratie is bedoeld voor één persistente host. De gekozen Vercel-migratie, inclusief Postgres-snapshots en Redis-pubsub, staat in [DEPLOYMENT.md](DEPLOYMENT.md); deze adapters zijn nog niet gebouwd.
+`scripts/start.mjs` zet snapshots onder ACADEMY_DATA en kopieert bestaande snapshots zonder nieuwere exemplaren te overschrijven. De supervisor stopt bij uitval van Proof en wacht bij SIGTERM op het kindproces. De nieuwe Dockerconfiguratie is bedoeld voor één persistente host. De gedeelde runtime, inclusief Postgres-snapshots en Redis-pubsub, staat in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 De laatste browserwalkthrough reproduceert een hang met comments plus pending replacement. Dit is een open releaseblocker ondanks geslaagde protocoltests. Zie [actueel browserrapport](../../demo/VERIFICATION.md).

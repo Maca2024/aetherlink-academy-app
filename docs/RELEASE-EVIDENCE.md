@@ -7,7 +7,7 @@ For each candidate retain:
 - Repository commit SHA and PR URL.
 - GitHub Actions run URL, run attempt and test summary, including skipped tests.
 - Dockerfile path, base image digest, resulting image ID/digest and target platform.
-- Vercel project ID, deployment ID, deployment URL, target environment and source SHA.
+- Hetzner host, container image ID/digest, deployed URL and source SHA (`SOURCE_REVISION`).
 - Readiness and HTTPS smoke result, followed by the deployed browser/MCP acceptance evidence.
 - Previous known-good deployment ID, schema compatibility assessment and rollback operator.
 

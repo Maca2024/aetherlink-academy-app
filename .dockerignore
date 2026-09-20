@@ -3,7 +3,7 @@
 **/.git
 
 # Runtime, local credentials, and database files must never enter the build
-# context. Vercel instances use the ephemeral ACADEMY_DATA path from the image.
+# context. Container instances use the ACADEMY_DATA path from the image.
 **/.data
 **/.verification
 **/.env*
