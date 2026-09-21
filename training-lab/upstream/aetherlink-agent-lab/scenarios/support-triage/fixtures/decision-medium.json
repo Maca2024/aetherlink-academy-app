@@ -1,0 +1,11 @@
+{
+  "ticket_id": "WL-1026",
+  "priority": "medium",
+  "sentiment": "frustrated",
+  "recommended_action": "investigate",
+  "summary": "Customer reports a possible duplicate charge and asks for a same-day fix.",
+  "customer_reply": "Thanks for flagging this. A support teammate should review the charge before we confirm the next step.",
+  "risk_note": "Possible duplicate charge needs human investigation; the supplied message does not prove the account state.",
+  "draft_only": true,
+  "human_approval_required": true
+}

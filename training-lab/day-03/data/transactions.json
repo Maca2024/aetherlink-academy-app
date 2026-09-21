@@ -1,0 +1,4 @@
+[
+  { "id": "TX-FIC-301", "amountEur": 1200, "region": "NL-TRAIN" },
+  { "id": "TX-FIC-302", "amountEur": 12500, "region": "BE-TRAIN" }
+]

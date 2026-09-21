@@ -1,0 +1,11 @@
+{
+  "ticket_id": "WL-1026",
+  "priority": "high",
+  "sentiment": "angry",
+  "recommended_action": "auto_reply",
+  "summary": "Action conflicts with priority.",
+  "customer_reply": "OPEN",
+  "risk_note": "OPEN",
+  "draft_only": true,
+  "human_approval_required": true
+}

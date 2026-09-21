@@ -1,0 +1,151 @@
+{
+  "name": "AetherLink Squad 2 · GitLab repository reviewer",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f26c8b47-8e37-4a34-9fd4-111111111111",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "review-id-field",
+              "name": "review_id",
+              "value": "GL-REVIEW-001",
+              "type": "string"
+            },
+            {
+              "id": "review-title-field",
+              "name": "review_title",
+              "value": "Review reconciliation runbook change for consistency",
+              "type": "string"
+            },
+            {
+              "id": "snapshot-field",
+              "name": "snapshot",
+              "value": "## GL-REVIEW-001 — Review reconciliation runbook change for consistency\n\n### Mock GitLab context\n- Project: aetherlink/payment-operations-training\n- Merge request: !42 (fictional, local snapshot)\n- Status: OPEN — fictional training draft\n- Target branch: main\n\n### Changed files\n- `README.md`: says the lab uses one ticket-coach twice and links the payment ticket workflow.\n- `scenarios/agent-menu/README.md`: says Day 3 builds ticket-coach and Day 4 chooses a Claude Code agent.\n- `n8n/workflows/ticket-coach.json`: contains a manual trigger, an AI Agent, an Anthropic model, and a Calculator tool.\n- `scenarios/payment-reconciliation/data/psp-settlements.csv`: contains rows SET-1003-A and SET-1003-B for the same transaction.\n- `scenarios/payment-reconciliation/tickets/FIN-003.md`: asks for duplicate settlement quarantine and keeps status UNRESOLVED.\n- `progress.md`: says live n8n and Claude Code runs are OPEN.\n\n### Review request\nCheck whether the documentation, workflow, and fictional data agree. Return three to eight findings with an existing path, quoted evidence, observation, severity, and the smallest proposal. Keep GitLab fields mock and do not approve, merge, or edit anything.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "id": "f26c8b47-8e37-4a34-9fd4-222222222222",
+      "name": "Mock GitLab snapshot"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.snapshot }}",
+        "options": {
+          "systemMessage": "You are a bounded repository reviewer for fictional local training. Read only the supplied mock GitLab snapshot. Do not write files, use remote tools, approve or merge a GitLab change, or invent a path, row, owner, policy, cause, or result. Use the connected Calculator tool once to count the six listed changed files and show the input and result. Return three to eight findings using level-three headings exactly `### F-01` through `### F-08` as needed. Every finding must contain `Path:`, `Evidence:`, `Observation:`, `Severity:` (low, medium, or high), and `Proposal:`. Then add `### Checked and consistent` and `### OPEN questions`. Keep mock GitLab context and all unresolved items visible. A shape checker and human reviewer decide whether each finding is supported.",
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "f26c8b47-8e37-4a34-9fd4-333333333333",
+      "name": "Repository Review Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        420,
+        220
+      ],
+      "id": "f26c8b47-8e37-4a34-9fd4-444444444444",
+      "name": "Anthropic Chat Model"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        680,
+        220
+      ],
+      "id": "f26c8b47-8e37-4a34-9fd4-555555555555",
+      "name": "Calculator"
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Mock GitLab snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Repository Review Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Repository Review Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock GitLab snapshot": {
+      "main": [
+        [
+          {
+            "node": "Repository Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

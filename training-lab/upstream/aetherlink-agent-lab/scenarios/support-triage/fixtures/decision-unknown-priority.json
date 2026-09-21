@@ -1,0 +1,11 @@
+{
+  "ticket_id": "WL-1026",
+  "priority": "urgent",
+  "sentiment": "angry",
+  "recommended_action": "escalate",
+  "summary": "Unknown priority must be rejected.",
+  "customer_reply": "OPEN",
+  "risk_note": "OPEN",
+  "draft_only": true,
+  "human_approval_required": true
+}

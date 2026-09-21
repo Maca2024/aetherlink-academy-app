@@ -101,3 +101,8 @@ file_patterns = ["Dockerfile", "Dockerfile.vercel", "infra/Dockerfile"]
 [[ignore]]
 rules = ["shellcheck:1007"]
 file_patterns = ["scripts/run.sh"]
+
+# The imported upstream hook uses the same CDPATH= cd -- idiom as scripts/run.sh.
+[[ignore]]
+rules = ["shellcheck:1007"]
+file_patterns = ["training-lab/upstream/aetherlink-agent-lab/scenarios/agent-menu/first-hook/protect-output.sh"]

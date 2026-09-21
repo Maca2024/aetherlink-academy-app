@@ -1,0 +1,34 @@
+name: Support triage participant check
+
+on:
+  push:
+    paths:
+      - "scenarios/support-triage/**"
+      - "n8n/workflows/support-triage.json"
+      - ".github/workflows/support-triage.yml"
+  pull_request:
+    paths:
+      - "scenarios/support-triage/**"
+      - "n8n/workflows/support-triage.json"
+      - ".github/workflows/support-triage.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax and fixture routing
+        run: |
+          python3 -m py_compile scenarios/support-triage/tools/support_triage.py
+          python3 -m py_compile scenarios/support-triage/tools/check_support_triage.py
+          python3 scenarios/support-triage/tools/check_support_triage.py
+      - name: Check example decision
+        run: |
+          python3 scenarios/support-triage/tools/check_support_triage.py \
+            --ticket scenarios/support-triage/fixtures/ticket.json \
+            --decision scenarios/support-triage/fixtures/example-output.json
+      - name: Check sanitized n8n JSON
+        run: python3 -c 'import json; p=json.load(open("n8n/workflows/support-triage.json")); assert not any("credentials" in n for n in p["nodes"]); assert {n["name"] for n in p["nodes"]} >= {"AI Agent", "Customer Reply Agent", "Risk Agent", "Code in JavaScript", "Switch"}'

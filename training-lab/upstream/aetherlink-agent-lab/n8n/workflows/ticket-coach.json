@@ -1,0 +1,151 @@
+{
+  "name": "AetherLink participant ticket coach",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d15c8b47-5d37-4c34-9fd4-111111111111",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ticket-id-field",
+              "name": "ticket_id",
+              "value": "TICKET-OPS-101",
+              "type": "string"
+            },
+            {
+              "id": "ticket-title-field",
+              "name": "ticket_title",
+              "value": "Explain a fee mismatch before reconciliation",
+              "type": "string"
+            },
+            {
+              "id": "ticket-text-field",
+              "name": "ticket",
+              "value": "## TICKET-OPS-101 — Explain a fee mismatch before reconciliation\n\n### Ticket identity\n\n- Ticket: `TICKET-OPS-101`\n- Title: Explain a fee mismatch before reconciliation\n- Status: `OPEN — fictional training draft`\n\n### Current situation\n\nAt the fictional Fictional Reconciliation cutoff of 2026-09-10 12:00 Europe/Amsterdam, batch B-20260909-02 contains transaction TX-NS-1004. The internal ledger records gross 15750 minor EUR, expected fee 315 minor EUR, and expected net 15435 minor EUR. The PSP settlement SET-1004-A records fee 300 minor EUR and net 15450 minor EUR. The bank credit for the batch is 15450 minor EUR. The team can see a 15 minor EUR difference in the fee calculation, but the current ticket does not say what should be checked next. No cause has been confirmed.\n\n### Desired situation\n\nA reviewer can see the preserved payment situation, the calculation that explains the fee difference, a small technical proposal, positive and negative behavior checks, and OPEN questions for the evidence or owner still needed. The draft must not approve the batch or invent a cause.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "id": "d15c8b47-5d37-4c34-9fd4-222222222222",
+      "name": "Ticket input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.ticket }}",
+        "options": {
+          "systemMessage": "You are a bounded ticket coach for fictional local payment-operations training. Read only the supplied ticket text. Do not read target examples as an oracle. Return a complete draft in the chat output and do not write files, use remote tools, or inspect unrelated tickets. Preserve the supplied ticket's Current situation and Desired situation sections verbatim. Then add exactly one Technical proposal, Positive tests, Negative tests, and OPEN questions section. Keep source facts separate from proposals and tests. Before drafting, call the connected Calculator tool for at least one arithmetic check supported by the selected ticket. Show the input values, result, and units. Do not calculate an unsupported amount. Cite the exact supplied input section for every technical proposal or test assumption; if the input does not support it, label it OPEN. Use only arithmetic directly supported by the supplied text and show the values and units. Never invent financial math, causes, source IDs, policy, owners, credentials, endpoints, remote records, approvals, or a resolved payment state. Keep any discrepancy unresolved until a human reviews the source. Use level-three Markdown headings (###) exactly as named in the output contract. Include at least two positive and two negative behavior checks. Write each check as Given / When / Then.",
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "d15c8b47-5d37-4c34-9fd4-333333333333",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        420,
+        220
+      ],
+      "id": "d15c8b47-5d37-4c34-9fd4-444444444444",
+      "name": "Anthropic Chat Model"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        680,
+        220
+      ],
+      "id": "d15c8b47-5d37-4c34-9fd4-555555555555",
+      "name": "Calculator"
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Ticket input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

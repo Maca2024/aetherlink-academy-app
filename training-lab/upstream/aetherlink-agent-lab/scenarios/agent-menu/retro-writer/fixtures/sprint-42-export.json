@@ -1,0 +1,43 @@
+{
+  "_note": "FICTIONAL training fixture. Fictional Reconciliation demo team, sprint 42. No real Jira project, people, or payments. Keys FIN-4xx are local references, not Jira-assigned.",
+  "sprint": {
+    "id": 42,
+    "name": "Fictional Reconciliation FinOps — Sprint 42 (fictional)",
+    "goal": "Explain and quarantine every batch difference for cutoff 2026-09-10 without approving a payout.",
+    "start": "2026-08-27",
+    "end": "2026-09-09",
+    "team_size": 5
+  },
+  "issues": [
+    {"key": "FIN-401", "type": "Story", "summary": "Reproduce fee calculation for batch B-20260909-02", "status": "Done", "story_points": 3, "created": "2026-08-27", "resolved": "2026-08-29", "labels": ["fee-mismatch"], "comments": [
+      {"author": "role:analyst", "created": "2026-08-28", "body": "Ledger fee 315 vs PSP fee 300 minor EUR reproduced. Cause not confirmed; fee schedule not in our sources."}
+    ]},
+    {"key": "FIN-402", "type": "Story", "summary": "Quarantine duplicate settlement SET-1003-B", "status": "Done", "story_points": 2, "created": "2026-08-27", "resolved": "2026-09-02", "labels": ["duplicate"], "comments": [
+      {"author": "role:reviewer", "created": "2026-09-01", "body": "Both rows kept visible. Waited two days for source confirmation that never came; closed as UNRESOLVED-quarantined."}
+    ]},
+    {"key": "FIN-403", "type": "Task", "summary": "Write runbook for daily reconciliation checklist", "status": "Done", "story_points": 3, "created": "2026-08-28", "resolved": "2026-09-05", "labels": ["runbook"], "comments": [
+      {"author": "role:developer", "created": "2026-09-03", "body": "First draft assumed a 5 minor EUR tolerance. Removed: no policy source. Marked OPEN."},
+      {"author": "role:reviewer", "created": "2026-09-05", "body": "Fresh reader reproduced normal and exception path in 12 minutes."}
+    ]},
+    {"key": "FIN-404", "type": "Bug", "summary": "Bank credit for B-20260910-02 is 34 minor EUR below PSP net", "status": "In Progress", "story_points": 5, "created": "2026-08-30", "resolved": null, "labels": ["payout-mismatch"], "comments": [
+      {"author": "role:analyst", "created": "2026-09-04", "body": "No source-row identifier from the bank yet. Blocked on evidence request; owner OPEN."},
+      {"author": "role:tester", "created": "2026-09-08", "body": "Negative test added: draft must not describe the payout as resolved."}
+    ]},
+    {"key": "FIN-405", "type": "Task", "summary": "Agree stop rule for unresolved discrepancies before cutoff", "status": "Done", "story_points": 1, "created": "2026-08-29", "resolved": "2026-08-30", "labels": ["process"], "comments": [
+      {"author": "role:analyst", "created": "2026-08-30", "body": "Stop rule: unresolved difference stays UNRESOLVED; no approval implied by silence."}
+    ]},
+    {"key": "FIN-406", "type": "Story", "summary": "Monitor not-yet-due settlement TX-NS-1008", "status": "To Do", "story_points": 2, "created": "2026-09-01", "resolved": null, "labels": ["timing"], "comments": []},
+    {"key": "FIN-407", "type": "Task", "summary": "Set up shared evidence folder and naming convention", "status": "Done", "story_points": 1, "created": "2026-08-27", "resolved": "2026-08-27", "labels": ["process"], "comments": [
+      {"author": "role:developer", "created": "2026-08-27", "body": "lab-notes/<day>-<topic>.md agreed."}
+    ]},
+    {"key": "FIN-408", "type": "Story", "summary": "Peer review of runbook by someone who did not write it", "status": "Done", "story_points": 2, "created": "2026-09-02", "resolved": "2026-09-08", "labels": ["review"], "comments": [
+      {"author": "role:reviewer", "created": "2026-09-08", "body": "Review waited four days for a free reviewer. Suggest pairing reviews with the daily close."}
+    ]},
+    {"key": "FIN-409", "type": "Bug", "summary": "Checker accepted an output with two 'OPEN questions' headings", "status": "Done", "story_points": 1, "created": "2026-09-03", "resolved": "2026-09-04", "labels": ["tooling"], "comments": [
+      {"author": "role:tester", "created": "2026-09-04", "body": "Heading count check added; invalid example now fails."}
+    ]},
+    {"key": "FIN-410", "type": "Story", "summary": "Explain batch difference for B-20260908-01", "status": "Carried over", "story_points": 3, "created": "2026-09-05", "resolved": null, "labels": ["needs-evidence"], "comments": [
+      {"author": "role:analyst", "created": "2026-09-09", "body": "Started on the last day; not enough time. Carry to sprint 43."}
+    ]}
+  ]
+}
