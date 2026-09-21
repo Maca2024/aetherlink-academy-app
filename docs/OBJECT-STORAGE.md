@@ -9,16 +9,22 @@ Without credentials the feature stays off. Every `/game/files` route answers 503
 Create the bucket in the EU jurisdiction, so objects stay in the EU:
 
 ```bash
-npx wrangler r2 bucket create aetherlink-academy-files --jurisdiction eu
+npx wrangler r2 bucket create aetherlink-academy --jurisdiction eu
 ```
 
-An EU bucket changes the endpoint host. Use `https://<account-id>.eu.r2.cloudflarestorage.com`, not the plain `r2.cloudflarestorage.com` form.
+The jurisdiction decides the endpoint host, and it is fixed at creation. An EU bucket is reachable only at `https://<account-id>.eu.r2.cloudflarestorage.com`. A bucket created without a jurisdiction uses the plain `https://<account-id>.r2.cloudflarestorage.com`. Both hosts answer the same authorization error to an unsigned request, so probing them tells you nothing. Check an existing bucket instead:
+
+```bash
+npx wrangler r2 bucket info aetherlink-academy
+```
+
+To change the jurisdiction of a bucket that already exists, create a new one and copy the objects across. There is no in-place move.
 
 ## Create a scoped API token
 
 1. Open the Cloudflare dashboard, then **R2 object storage** → **API** → **Manage API tokens**.
 2. Create a token with **Object Read & Write**.
-3. Scope it to `aetherlink-academy-files` alone. Do not use an account-wide admin token.
+3. Scope it to `aetherlink-academy` alone. Do not use an account-wide admin token.
 4. Copy the **Access Key ID** and the **Secret Access Key**. Cloudflare shows the secret once.
 
 ## Configure the server
@@ -27,8 +33,8 @@ Add these to `/root/aetherlink-academy/.env` on the VPS, mode 600. Never commit 
 
 | Variable | Value |
 | --- | --- |
-| `S3_BUCKET` | `aetherlink-academy-files` |
-| `S3_ENDPOINT` | `https://<account-id>.eu.r2.cloudflarestorage.com` |
+| `S3_BUCKET` | `aetherlink-academy` |
+| `S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com`, or the `.eu.` host for an EU bucket |
 | `S3_ACCESS_KEY_ID` | the token's access key id |
 | `S3_SECRET_ACCESS_KEY` | the token's secret access key |
 | `S3_REGION` | leave unset; it defaults to `auto`, which is what R2 expects |
