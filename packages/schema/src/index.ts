@@ -1,0 +1,78 @@
+import {Schema} from 'effect';
+
+const IdText = Schema.String.pipe(Schema.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,64}$/)));
+export const SlideId = IdText.pipe(Schema.brand('SlideId'));
+export type SlideId = Schema.Schema.Type<typeof SlideId>;
+export const LessonId = IdText.pipe(Schema.brand('LessonId'));
+export type LessonId = Schema.Schema.Type<typeof LessonId>;
+
+/** Source decks use plain English strings. The object form carries an optional Dutch translation. */
+export const LocalizedText = Schema.Struct({en: Schema.String, nl: Schema.optional(Schema.String)});
+export type LocalizedText = Schema.Schema.Type<typeof LocalizedText>;
+
+export const SlideType = Schema.Literals(['context', 'concept', 'practice', 'review', 'recap', 'pause']);
+export const SlideLayout = Schema.Literals(['pillars', 'steps', 'compare', 'exercise', 'recap']);
+
+const Text = Schema.String;
+const Card = Schema.Struct({title: Text, body: Text});
+const Item = Schema.Struct({label: Text, caption: Schema.optional(Text), detail: Schema.optional(Text)});
+const Column = Schema.Struct({title: Text, items: Schema.Array(Text), foot: Schema.optional(Text)});
+
+export type JsonValue = null | boolean | number | string | readonly JsonValue[] | {readonly [key: string]: JsonValue};
+const JsonValue: Schema.Codec<JsonValue, JsonValue> = Schema.suspend((): Schema.Codec<JsonValue, JsonValue> => Schema.Union([
+  Schema.Null,
+  Schema.Boolean,
+  Schema.Number,
+  Schema.String,
+  Schema.Array(JsonValue),
+  Schema.Record(Schema.String, JsonValue),
+]) as Schema.Codec<JsonValue, JsonValue>);
+
+export const Visual = JsonValue;
+
+const PublicSlideFields = {
+  id: SlideId,
+  lessonId: LessonId,
+  ordinal: Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1))),
+  title: Text,
+  kicker: Schema.optional(Text),
+  subtitle: Schema.optional(Text),
+  type: SlideType,
+  layout: Schema.optional(SlideLayout),
+  cards: Schema.optional(Schema.Array(Card)),
+  items: Schema.optional(Schema.Array(Item)),
+  columns: Schema.optional(Schema.Array(Column)),
+  steps: Schema.optional(Schema.Array(Text)),
+  expected: Schema.optional(Text),
+  check: Schema.optional(Text),
+  timer: Schema.optional(Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0)))),
+  prompt: Schema.optional(Text),
+  tagline: Schema.optional(Text),
+  dark: Schema.optional(Schema.Boolean),
+  visual: Schema.optional(Visual),
+  image: Schema.optional(Text),
+  planB: Schema.optional(Text),
+} as const;
+
+export const Slide = Schema.Struct({...PublicSlideFields, notes: Schema.optional(Text)});
+export type Slide = Schema.Schema.Type<typeof Slide>;
+
+const ParticipantSlide = Schema.Struct(PublicSlideFields);
+
+const withoutVisualQuizAnswer = (value: JsonValue): JsonValue => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  if (!('quiz' in value)) return value;
+  const quiz = (value as {readonly [key: string]: JsonValue}).quiz;
+  if (quiz === null || typeof quiz !== 'object' || Array.isArray(quiz)) return value;
+  const {answer: _answer, ...publicQuiz} = quiz as {readonly [key: string]: JsonValue};
+  return {...value, quiz: publicQuiz};
+};
+
+/** Project through an explicit allowlist and remove hidden visual quiz answers. */
+export const participantSlide = (slide: Slide): Schema.Schema.Type<typeof ParticipantSlide> =>
+  Schema.decodeUnknownSync(ParticipantSlide)(slide.visual === undefined
+    ? slide
+    : {...slide, visual: withoutVisualQuizAnswer(slide.visual)});
+
+export const decodeSlide = (input: unknown): Slide => Schema.decodeUnknownSync(Slide)(input);
+export const encodeSlide = (slide: Slide): unknown => Schema.encodeSync(Slide)(slide);
