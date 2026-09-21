@@ -5,7 +5,7 @@ const cleanOrigin = (value) => String(value || '').trim().replace(/\/$/, '');
 export function readAiConfig(env=process.env) {
   const baseUrl = cleanOrigin(env.LITELLM_BASE_URL || env.LITELLM_URL);
   const apiKey = String(env.LITELLM_API_KEY || env.WORLDLINE_LITELLM_API_KEY || '').trim();
-  const tutorModel = String(env.LITELLM_TUTOR_MODEL || env.WORLDLINE_TUTOR_MODEL || 'anthropic/claude-sonnet-4-5').trim();
+  const tutorModel = String(env.LITELLM_TUTOR_MODEL || env.WORLDLINE_TUTOR_MODEL || 'anthropic/claude-sonnet-4-6').trim();
   const evaluatorModel = String(env.LITELLM_EVALUATOR_MODEL || env.WORLDLINE_EVALUATOR_MODEL || tutorModel).trim();
   const maxTokens = Math.min(1600, Math.max(128, Number(env.LITELLM_MAX_TOKENS || 700)));
   return {baseUrl, apiKey, tutorModel, evaluatorModel, maxTokens, configured:Boolean(baseUrl && apiKey)};

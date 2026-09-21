@@ -6,20 +6,20 @@ test('LiteLLM config exposes no secret and preserves Claude model routing', () =
   const env = {
     LITELLM_BASE_URL: 'https://llm.example.test/',
     LITELLM_API_KEY: 'secret-key',
-    LITELLM_TUTOR_MODEL: 'anthropic/claude-sonnet-4-5',
-    LITELLM_EVALUATOR_MODEL: 'claude-opus-5',
+    LITELLM_TUTOR_MODEL: 'anthropic/claude-sonnet-4-6',
+    LITELLM_EVALUATOR_MODEL: 'claude-opus-4-8',
   };
   const config = readAiConfig(env);
   assert.equal(config.baseUrl, 'https://llm.example.test');
   assert.equal(config.configured, true);
-  assert.equal(publicAiConfig(env).tutorModel, 'anthropic/claude-sonnet-4-5');
+  assert.equal(publicAiConfig(env).tutorModel, 'anthropic/claude-sonnet-4-6');
   assert.equal(Object.hasOwn(publicAiConfig(env), 'apiKey'), false);
 });
 
 test('LiteLLM gateway sends the key only server-side and returns Claude content', async () => {
   let request;
   const result = await completeWithLiteLLM({
-    env: {LITELLM_BASE_URL: 'https://llm.example.test', LITELLM_API_KEY: 'secret-key', LITELLM_TUTOR_MODEL: 'claude-sonnet-4-5'},
+    env: {LITELLM_BASE_URL: 'https://llm.example.test', LITELLM_API_KEY: 'secret-key', LITELLM_TUTOR_MODEL: 'claude-sonnet-4-6'},
     messages: [{role: 'user', content: 'Help me learn.'}],
     fetchImpl: async (url, options) => {
       request = {url, options};
@@ -27,10 +27,10 @@ test('LiteLLM gateway sends the key only server-side and returns Claude content'
     },
   });
   assert.equal(result.content, 'A clear next step.');
-  assert.equal(result.model, 'claude-sonnet-4-5');
+  assert.equal(result.model, 'claude-sonnet-4-6');
   assert.equal(request.url, 'https://llm.example.test/v1/chat/completions');
   assert.equal(request.options.headers.authorization, 'Bearer secret-key');
-  assert.equal(JSON.parse(request.options.body).model, 'claude-sonnet-4-5');
+  assert.equal(JSON.parse(request.options.body).model, 'claude-sonnet-4-6');
 });
 
 test('LiteLLM gateway rejects an unconfigured or non-Claude route', async () => {

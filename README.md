@@ -1,6 +1,6 @@
 # AetherLink Academy
 
-Nederlandse leeromgeving met een echt, doorlopend Proof-document, flexibele squads (standaard ~4–5, soft max ~12), één driver, facilitatorbediening, privé-quiz, brongebonden kennisbank en bewijs/review/handoff. Eigen Claude Code werkt via een beperkte MCP-bridge. De app bevat geen modelchat en vraagt geen Anthropic API-key.
+Nederlandse leeromgeving met een echt, doorlopend Proof-document, flexibele squads (standaard ~4–5, soft max ~12), één driver, facilitatorbediening, privé-quiz, brongebonden kennisbank en bewijs/review/handoff. Eigen Claude Code werkt via een beperkte MCP-bridge. De Worldline-cursus bevat daarnaast een server-side LiteLLM-tutor en evaluator voor Claude; browserclients ontvangen nooit een modelkey.
 
 Zie [de vijf supportdagen](docs/LEARNING-ROUTE.md) voor inhoud, voortgang en de grenzen van de oefeningen. Squads bouwen en presenteren ook [slidedecks](docs/SLIDES.md) via de UI of via de eigen Claude Code (MCP-tools `create_deck`, `add_slide`, `update_slide`, `patch_deck`, `export_deck_html`).
 
@@ -51,8 +51,8 @@ Configureer de server-side gateway met:
 ```dotenv
 LITELLM_BASE_URL=https://litellm.example.internal
 LITELLM_API_KEY=redacted-server-secret
-LITELLM_TUTOR_MODEL=anthropic/claude-sonnet-4-5
-LITELLM_EVALUATOR_MODEL=anthropic/claude-opus-4-1
+LITELLM_TUTOR_MODEL=anthropic/claude-sonnet-4-6
+LITELLM_EVALUATOR_MODEL=anthropic/claude-opus-4-8
 LITELLM_MAX_TOKENS=700
 ```
 
