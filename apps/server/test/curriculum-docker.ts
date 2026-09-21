@@ -67,7 +67,7 @@ export const startCurriculumPostgres = async (): Promise<CurriculumPostgresHandl
     const port = boundPort(handle.name);
     const readyHandle: CurriculumPostgresHandle = {...handle, port, url: `postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${port}/${POSTGRES_DATABASE}?sslmode=disable`};
     await waitUntil('curriculum postgres TCP port', () => tcpReady(port), 60_000, 250);
-    await waitUntil('curriculum postgres accepting connections', () => tryDocker('exec', readyHandle.name, 'pg_isready', '-U', POSTGRES_USER, '-d', POSTGRES_DATABASE) !== null, 60_000, 250);
+    await waitUntil('curriculum postgres accepting TCP connections', () => tryDocker('exec', readyHandle.name, 'pg_isready', '-h', '127.0.0.1', '-U', POSTGRES_USER, '-d', POSTGRES_DATABASE) !== null, 60_000, 250);
     return readyHandle;
   } catch (error) {
     removeOwned(handle.name, handle.owner);
