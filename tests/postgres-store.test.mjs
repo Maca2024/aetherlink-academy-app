@@ -9,14 +9,14 @@ test('Postgres Academy state survives independent concurrent instances', {skip:!
  const url=new URL(process.env.DATABASE_URL);
  url.searchParams.delete('sslmode');
  url.searchParams.delete('channel_binding');
- const pool=new Pool({connectionString:url.href,ssl:{rejectUnauthorized:true},max:8,connectionTimeoutMillis:10000});
+ const pool=new Pool({connectionString:url.href,ssl:process.env.PGSSLMODE==='disable'?false:{rejectUnauthorized:true},max:8,connectionTimeoutMillis:10000});
  const schema=`academy_test_${randomUUID().replaceAll('-','')}`;
  const one=new PostgresStore(pool,{schema});
  const two=new PostgresStore(pool,{schema});
  try {
   await one.init();
   const migration=(await pool.query(`SELECT value FROM "${schema}".system_metadata WHERE key='academy_schema_migration'`)).rows[0]?.value;
-  assert.match(migration,/^3:[a-f0-9]{64}$/);
+  assert.match(migration,/^4:[a-f0-9]{64}$/);
   await two.init();
   const room=await one.create('Concurrency',{slug:'test-document',editor:'test-editor'});
   const joined=await Promise.allSettled(Array.from({length:15},(_,i)=>(i%2?one:two).join(room.code,`Participant ${i}`)));
@@ -86,7 +86,7 @@ test('Academy schema migration fails closed for changed or unversioned state', {
  const url=new URL(process.env.DATABASE_URL);
  url.searchParams.delete('sslmode');
  url.searchParams.delete('channel_binding');
- const pool=new Pool({connectionString:url.href,ssl:{rejectUnauthorized:true},max:4,connectionTimeoutMillis:10000});
+ const pool=new Pool({connectionString:url.href,ssl:process.env.PGSSLMODE==='disable'?false:{rejectUnauthorized:true},max:4,connectionTimeoutMillis:10000});
  const schema=`academy_test_${randomUUID().replaceAll('-','')}`;
  const one=new PostgresStore(pool,{schema});
  const two=new PostgresStore(pool,{schema});

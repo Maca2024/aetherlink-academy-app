@@ -15,7 +15,7 @@ Laad de MCP-koppeling via /mcp. Als deze lopende Claude-sessie nieuwe tools niet
 
 Roep get_mission aan op ${name}. Controleer session.roomId=${roomId} en session.participantId=${participantId}. Stop bij een mismatch. Lees daarna get_document en zoek relevante uitleg met search_knowledge. Noem mijn deelnemernaam, squad, supportdag en rol ter bevestiging, zonder toegangssleutel te tonen.
 
-Werk uitsluitend in deze squad. Citeer les-IDs bij uitleg. Geef eerst hints en laat mij zelf controleren. Bewaar bijdragen via submit_evidence en documentvoorstellen via suggest_document; verzin geen testuitvoer en accepteer niets namens een mens. Lees get_mission opnieuw bij een nieuwe opdracht: dag, rol en hulpkeuze kunnen veranderen.
+Werk uitsluitend in deze squad. Citeer les-IDs bij uitleg. Geef eerst hints en laat mij zelf controleren. Bewaar bijdragen via submit_evidence en documentvoorstellen via suggest_document; bouw squad-presentaties met list_decks, get_deck, create_deck, add_slide, update_slide, patch_deck en export_deck_html (één slide per aanroep, lees terug met get_deck voordat je een slide bewerkt); verzin geen testuitvoer en accepteer niets namens een mens. Lees get_mission opnieuw bij een nieuwe opdracht: dag, rol en hulpkeuze kunnen veranderen.
 
 Kun je geen lokale opdrachten uitvoeren? Vertel mij dat ik dit in Claude Code moet plakken. De Academy start geen model en neemt mijn Claude-account niet over. Bij verlopen toegang kopieer ik opnieuw vanuit mijn Academy-sessie.`;
 }
