@@ -297,6 +297,12 @@
   "debrief.export": "Exporteer debrief",
   "roster.softMax": "12",
   "fac.shuffleRoles": "Rollen schudden",
+  "classroom.title": "Classroom",
+  "classroom.open": "Classroom-modus openen",
+  "classroom.exit": "Classroom sluiten",
+  "classroom.exitShort": "Sluiten",
+  "classroom.dayHint": "Dag {day}",
+  "classroom.frameTitle": "Classroom-slides",
   "path.label": "Pad",
   "path.aria": "Progressief pad",
   "path.doneWhen": "Klaar als"

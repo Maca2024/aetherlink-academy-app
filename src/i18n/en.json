@@ -297,6 +297,12 @@
   "debrief.export": "Export debrief",
   "roster.softMax": "12",
   "fac.shuffleRoles": "Shuffle roles",
+  "classroom.title": "Classroom",
+  "classroom.open": "Open Classroom mode",
+  "classroom.exit": "Exit Classroom",
+  "classroom.exitShort": "Exit",
+  "classroom.dayHint": "Day {day}",
+  "classroom.frameTitle": "Classroom slides",
   "path.label": "Path",
   "path.aria": "Progressive path",
   "path.doneWhen": "Done when"
