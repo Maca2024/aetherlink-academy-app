@@ -2,10 +2,7 @@ diff --git a/server/plugins/auth.ts b/server/plugins/auth.ts
 index 2da0593..38cb0c9 100644
 --- a/server/plugins/auth.ts
 +++ b/server/plugins/auth.ts
-@@ -3,6 +3,14 @@ import { createAuthPlugin } from "@agent-native/core/server";
- import { DECK_AGENT_CONTEXT_ENDPOINT } from "../../shared/agent-readable.js";
- 
- export default createAuthPlugin({
+@@ -5,0 +6,8 @@ export default createAuthPlugin({
 +  betterAuth: {
 +    plugins: [{
 +      id: "academy-disable-signup-auto-session",
@@ -14,6 +11,3 @@ index 2da0593..38cb0c9 100644
 +      },
 +    }],
 +  },
-   workspaceAppPublicPaths: ["/"],
-   marketing: {
-     appName: "Slides",
