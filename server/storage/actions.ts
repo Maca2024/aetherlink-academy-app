@@ -1,7 +1,3 @@
-// File actions: upload, list, download and delete, as Effect programs scoped
-// to one squad room. There is no multipart upload, so the whole body is
-// buffered and the size cap is enforced here before anything reaches the
-// object store. A file from another room answers FileNotFound, never 403.
 import {createHash, randomUUID} from 'node:crypto';
 import {Effect, ParseResult, Schema} from 'effect';
 import type {Actor} from '../shared/actor.ts';
@@ -27,8 +23,6 @@ export const makeFileActions=Effect.gen(function*(){
   if(!(bytes instanceof Uint8Array))return yield* Effect.fail(new InvalidInput({reason:'Geen bestandsinhoud ontvangen.'}));
   if(!bytes.byteLength)return yield* Effect.fail(new InvalidInput({reason:'Het bestand is leeg.'}));
   if(bytes.byteLength>MAX_UPLOAD_BYTES)return yield* Effect.fail(new FileTooLarge({sizeBytes:bytes.byteLength,maxBytes:MAX_UPLOAD_BYTES}));
-  // Checked before the schema so an unsupported type names the allowlist once
-  // instead of reporting one mismatch per literal in the union.
   const requested=(raw as {contentType?:unknown}|null)?.contentType;
   if(typeof requested!=='string'||!(requested in CONTENT_TYPES))return yield* Effect.fail(new InvalidInput({reason:`Bestandstype ${typeof requested==='string'&&requested?requested:'ontbreekt'} wordt niet ondersteund. Toegestaan: ${Object.keys(CONTENT_TYPES).join(', ')}.`}));
   const input=yield* parse(UploadInput)(raw);

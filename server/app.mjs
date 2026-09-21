@@ -48,7 +48,9 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  });
  // Uploads carry their own content type, including application/json, so the raw
  // parser has to claim /game/files before the global JSON parser consumes it.
+ app.use('/game/files',async(req,res,next)=>{try{await browser(req);next();}catch(e){next(e);}});
  app.use('/game/files',express.raw({type:'*/*',limit:'26mb'}));
+ app.use('/game/files',(e,req,res,next)=>{if(e?.status===413&&e.type==='entity.too.large')return res.status(413).json({error:'Bestand is te groot; maximaal 25 MiB.'});next(e);});
  app.use(express.json({limit:'64kb'}));
  const buckets=new Map();app.use(['/game','/mcp','/auth'],(req,res,next)=>{const k=req.ip;const b=buckets.get(k)||{t:Date.now(),n:0};if(Date.now()-b.t>60000){b.t=Date.now();b.n=0;}b.n++;buckets.set(k,b);if(b.n>1500)return res.status(429).json({error:'Te veel verzoeken. Wacht even.'});next();});
  const wrap=fn=>async(req,res,next)=>{try{await fn(req,res);}catch(e){next(e);}};
@@ -124,7 +126,6 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.delete('/game/decks/:deckId',wrap(async(req,res)=>res.json(await slides.run('deleteDeck',deckActor(await browser(req)),{deckId:deckId(req)}))));
  app.get('/game/decks/:deckId/export.html',wrap(async(req,res)=>{const result=await slides.run('exportHtml',deckActor(await browser(req)),{deckId:deckId(req)});res.type('text/html').set('Content-Disposition',`attachment; filename="${result.filename}"`).set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: data:; font-src https: data:").send(result.html);}));
 
- // Room-scoped file storage (Effect-TS module, server/storage). Bytes live in S3/R2, metadata in Postgres.
  const fileId=req=>String(req.params.fileId||'');
  const downloadName=name=>name.replace(/[^\p{L}\p{N}._ -]+/gu,'_').slice(0,200)||'bestand';
  app.post('/game/files',wrap(async(req,res)=>res.status(201).json(await files.run('uploadFile',deckActor(await browser(req)),{filename:req.query.filename,contentType:req.query.contentType,bytes:req.body}))));
@@ -133,7 +134,9 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   const file=await files.run('getFile',deckActor(await browser(req)),{fileId:fileId(req)});
   // SVG renders as same-origin script, so only raster images are served inline.
   const inline=file.contentType.startsWith('image/')&&file.contentType!=='image/svg+xml';
-  res.type(file.contentType).set('Content-Disposition',`${inline?'inline':'attachment'}; filename="${downloadName(file.filename)}"`).set('Cache-Control','private, no-store').send(Buffer.from(file.bytes));
+  res.attachment(downloadName(file.filename)).type(file.contentType);
+  if(inline)res.set('Content-Disposition',res.get('Content-Disposition').replace(/^attachment/,'inline'));
+  res.set('Cache-Control','private, no-store').send(Buffer.from(file.bytes));
  }));
  app.delete('/game/files/:fileId',wrap(async(req,res)=>res.json(await files.run('deleteFile',deckActor(await browser(req)),{fileId:fileId(req)}))));
  async function executeMcp(token,tool,input){const a=await store.auth(token,'mcp');const {r,p}=a;if(!p)fail(403,'Geen deelnemer.');let result;

@@ -1,7 +1,3 @@
-// Promise-facing adapter: the Express routes stay plain JS and call
-// `run(action, actor, input)`; typed failures become `{status,message}` errors
-// the existing `fail`-style error middleware already understands. Without S3
-// credentials the whole feature is off and every action answers 503.
 import {Cause, Context, Effect, Exit, Layer, ManagedRuntime} from 'effect';
 import type {Pool} from 'pg';
 import type {Actor} from '../shared/actor.ts';

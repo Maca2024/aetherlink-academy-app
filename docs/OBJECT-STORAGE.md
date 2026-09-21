@@ -92,8 +92,18 @@ Create the bucket once, then set the same four variables with `S3_ENDPOINT=http:
 Run the gated round-trip test with those variables set:
 
 ```bash
-node --test tests/storage-s3.test.ts
+S3_BUCKET=academy-dev \
+S3_ENDPOINT=http://127.0.0.1:59000 \
+S3_ACCESS_KEY_ID=academy \
+S3_SECRET_ACCESS_KEY=academy-dev-secret \
+node --import ./vendor/proof-sdk/node_modules/tsx/dist/loader.mjs --test tests/storage-s3.test.ts
 ```
+
+The CI storage gate runs this same round trip against a pinned MinIO image. The
+route and in-memory action regressions run in the regular unit check, and the
+Postgres metadata and compensation regressions run in the database check. CI
+does not connect to a live R2 bucket, so these checks do not verify R2 account,
+bucket, token or network configuration.
 
 ## Why the bucket stays private
 
@@ -107,4 +117,4 @@ Serving straight from a CDN would need a custom domain on the bucket, and a cust
 - Allowed types are PNG, JPEG, GIF, WebP, SVG, PDF, plain text, Markdown, CSV and JSON. The object key's extension comes from the content type, never from the filename.
 - SVG downloads as an attachment rather than rendering inline, because a same-origin SVG can execute script. Other images render inline.
 - Files belong to one squad room. A file from another room answers 404, not 403, so it does not leak existence.
-- Deleting a deck's room cascades to its file rows. Objects in the bucket are removed on a best-effort basis, so set a lifecycle rule if orphans matter.
+- Deleting a deck's room cascades to its file metadata rows in Postgres. Room deletion does not remove the corresponding bucket objects; set a lifecycle rule or remove those objects separately if orphaned objects matter.

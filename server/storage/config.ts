@@ -1,6 +1,3 @@
-// S3-compatible credentials. The `S3_*` names are canonical and the `R2_*`
-// aliases match the upstream agent-native app, so a future standalone
-// deployment reads the same environment without a translation layer.
 export interface StorageConfig{
  readonly bucket:string;
  readonly endpoint:string;

@@ -1,5 +1,3 @@
-// Room-scoped file domain. One stored file belongs to exactly one squad room,
-// mirroring how a deck does; bytes live in the object store, metadata in Postgres.
 import {Schema} from 'effect';
 
 /** The allowlist doubles as the object-key extension map; never trust the filename. */
@@ -35,8 +33,6 @@ export class StoredFile extends Schema.Class<StoredFile>('StoredFile')({
 }){}
 export const decodeStoredFile=Schema.decodeUnknown(StoredFile);
 export const encodeStoredFile=Schema.encodeSync(StoredFile);
-
-// ---- Action inputs ----------------------------------------------------------
 
 export const UploadInput=Schema.Struct({filename:Text(200).pipe(Schema.minLength(1)),contentType:ContentType});
 export const FileIdInput=Schema.Struct({fileId:Schema.UUID});

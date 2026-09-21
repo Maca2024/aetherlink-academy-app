@@ -7,7 +7,6 @@ export class InvalidInput extends Data.TaggedError('InvalidInput')<{reason:strin
  get message(){return this.reason;}
 }
 export class FileTooLarge extends Data.TaggedError('FileTooLarge')<{sizeBytes:number;maxBytes:number}>{
- // Round the size up, so a file a few bytes over the cap does not report the cap itself.
  get message(){return `Bestand is ${(Math.ceil(this.sizeBytes/104857.6)/10).toFixed(1)} MiB; maximaal ${Math.round(this.maxBytes/1048576)} MiB.`;}
 }
 export class StorageUnavailable extends Data.TaggedError('StorageUnavailable')<{reason?:string;cause?:unknown}>{
@@ -21,7 +20,6 @@ export class Forbidden extends Data.TaggedError('Forbidden')<{reason:string}>{
 }
 export type StorageError=FileNotFound|InvalidInput|FileTooLarge|StorageUnavailable|ObjectStoreFailure|Forbidden;
 
-/** Map a tagged error onto the HTTP status the Express layer uses with `fail`. */
 export const httpStatus=(error:StorageError):number=>{
  switch(error._tag){
   case 'FileNotFound':return 404;

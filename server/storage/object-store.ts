@@ -1,6 +1,3 @@
-// ObjectStore: the bytes boundary. The S3 layer signs plain `fetch` calls with
-// aws4fetch and speaks path-style URLs only, which is the one dialect both
-// Cloudflare R2 and MinIO accept unchanged.
 import {AwsClient} from 'aws4fetch';
 import {Context, Effect, Layer, Ref} from 'effect';
 import type {StorageConfig} from './config.ts';
