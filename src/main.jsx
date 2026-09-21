@@ -1,6 +1,6 @@
-import React,{useEffect,useState,useRef} from 'react';
+import React,{lazy,Suspense,useEffect,useState,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Users,BookOpen,Compass,Target,Sparkles,ClipboardCheck,Sun,Moon,ArrowRight,Clock,Play,Pause,RotateCw,Shuffle,HelpCircle,Check,LogOut,Copy,FileText,ExternalLink,Presentation,X} from 'lucide-react';
+import {Users,BookOpen,Compass,Target,Sparkles,ClipboardCheck,Sun,Moon,ArrowRight,Clock,Play,Pause,RotateCw,Shuffle,HelpCircle,Check,LogOut,Copy,FileText,ExternalLink,Presentation,X,GraduationCap} from 'lucide-react';
 import {api,authApi,getToken,saveSession} from './api';
 import {Knowledge,Coach,Lesson,Solo,Review,Route,Debrief} from './panels';
 import {Decks} from './slides';
@@ -8,11 +8,14 @@ import {I18nProvider,LanguageToggle,useT,useI18n} from './i18n';
 import {classroomEmbedUrl,CLASSROOM_SANDBOX} from './classroom';
 import './style.css';
 
+const WorldlineCourse=lazy(()=>import('./worldline/WorldlineCourse').then(module=>({default:module.WorldlineCourse})));
+
 const phases=['Plan','Design','Build','Test','Deploy','Maintain'];
 const navIds=[
   ['squad','nav.squad',Users],
   ['route','nav.route',Compass],
   ['lesson','nav.lesson',BookOpen],
+  ['course','nav.course',GraduationCap],
   ['solo','nav.solo',Target],
   ['coach','nav.coach',Sparkles],
   ['review','nav.review',ClipboardCheck],
@@ -68,7 +71,7 @@ function App(){
       {facilitator&&<FacilitatorControls room={room} control={control} busy={busy} connected={connected} onOpenClassroom={()=>setClassroomOpen(true)}/>}
       {facilitator&&classroomOpen&&<ClassroomOverlay room={room} onClose={()=>setClassroomOpen(false)}/>}
       <div className="workspace">
-        <section className="primary">{view==='squad'&&<Document room={room} theme={theme}/>}{view==='route'&&<Route room={room} onNavigate={setView}/>}{view==='lesson'&&<Lesson room={room} action={action} busy={busy}/>}{view==='solo'&&<Solo room={room} action={action} busy={busy} onNavigate={setView}/>}{view==='coach'&&<Coach room={room} action={action}/>}{view==='review'&&<Review room={room} action={action} busy={busy}/>}{view==='decks'&&<Decks room={room} action={action} busy={busy}/>}{view==='debrief'&&facilitator&&<Debrief room={room}/>}</section>
+        <section className="primary">{view==='squad'&&<Document room={room} theme={theme}/>}{view==='route'&&<Route room={room} onNavigate={setView}/>}{view==='lesson'&&<Lesson room={room} action={action} busy={busy}/>}{view==='course'&&<Suspense fallback={<section className="panel content-panel"><p className="muted">Loading Worldline course…</p></section>}><WorldlineCourse room={room}/></Suspense>}{view==='solo'&&<Solo room={room} action={action} busy={busy} onNavigate={setView}/>}{view==='coach'&&<Coach room={room} action={action}/>}{view==='review'&&<Review room={room} action={action} busy={busy}/>}{view==='decks'&&<Decks room={room} action={action} busy={busy}/>}{view==='debrief'&&facilitator&&<Debrief room={room}/>}</section>
         <aside className="right-rail">
           <section className="panel roster">
             <div className="panel-heading"><h2>{t('roster.title')} <span>({room.members.length}/{t('roster.softMax')})</span></h2><Users size={17}/></div>
