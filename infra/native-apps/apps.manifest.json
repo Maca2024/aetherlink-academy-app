@@ -1,0 +1,135 @@
+{
+  "scope": [
+    "assets",
+    "calendar",
+    "chat",
+    "clips",
+    "content",
+    "slides"
+  ],
+  "sourceRepository": "https://github.com/BuilderIO/agent-native",
+  "sourceRevision": "adec853eb337cbe0ead48464305d6f30cc07806e",
+  "mainAcademyDestination": "OpenShip",
+  "productionDomain": "academy.aetherlink.ai",
+  "cutoverIssue": "AET-34",
+  "suiteIssue": "AET-45",
+  "requiresOpenShipCredential": true,
+  "apps": [
+    {
+      "app": "slides",
+      "upstreamPath": "templates/slides",
+      "linearIssue": "AET-25",
+      "rolloutOrder": 0,
+      "status": "deployed-poc",
+      "proposedProject": "academy-slides-poc",
+      "proposedOrigin": "https://slides-poc.91-99-78-17.sslip.io",
+      "database": "slides_poc",
+      "releaseRequirements": [],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    },
+    {
+      "app": "chat",
+      "upstreamPath": "templates/chat",
+      "linearIssue": "AET-48",
+      "rolloutOrder": 1,
+      "status": "not-deployed",
+      "proposedProject": "academy-chat-poc",
+      "proposedOrigin": "https://chat-poc.91-99-78-17.sslip.io",
+      "database": "academy_chat_poc",
+      "releaseRequirements": [],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    },
+    {
+      "app": "content",
+      "upstreamPath": "templates/content",
+      "linearIssue": "AET-50",
+      "rolloutOrder": 2,
+      "status": "not-deployed",
+      "proposedProject": "academy-content-poc",
+      "proposedOrigin": "https://content-poc.91-99-78-17.sslip.io",
+      "database": "academy_content_poc",
+      "releaseRequirements": [],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    },
+    {
+      "app": "assets",
+      "upstreamPath": "templates/assets",
+      "linearIssue": "AET-46",
+      "rolloutOrder": 3,
+      "status": "not-deployed",
+      "proposedProject": "academy-assets-poc",
+      "proposedOrigin": "https://assets-poc.91-99-78-17.sslip.io",
+      "database": "academy_assets_poc",
+      "releaseRequirements": [
+        "object-storage"
+      ],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    },
+    {
+      "app": "calendar",
+      "upstreamPath": "templates/calendar",
+      "linearIssue": "AET-47",
+      "rolloutOrder": 4,
+      "status": "not-deployed",
+      "proposedProject": "academy-calendar-poc",
+      "proposedOrigin": "https://calendar-poc.91-99-78-17.sslip.io",
+      "database": "academy_calendar_poc",
+      "releaseRequirements": [
+        "google-oauth"
+      ],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    },
+    {
+      "app": "clips",
+      "upstreamPath": "templates/clips",
+      "linearIssue": "AET-49",
+      "rolloutOrder": 5,
+      "status": "not-deployed",
+      "proposedProject": "academy-clips-poc",
+      "proposedOrigin": "https://clips-poc.91-99-78-17.sslip.io",
+      "database": "academy_clips_poc",
+      "releaseRequirements": [
+        "object-storage",
+        "transcription-provider",
+        "media-capacity"
+      ],
+      "acceptance": [
+        "authenticated-browser-flow",
+        "create-edit-readback",
+        "restart-persistence",
+        "exact-artifact-identity",
+        "resource-observation"
+      ]
+    }
+  ]
+}
