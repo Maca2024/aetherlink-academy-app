@@ -1,0 +1,24 @@
+{
+  "name": "@academy/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "dev": "vite --port 5178 --strictPort",
+    "preview": "vite preview --port 5178 --strictPort"
+  },
+  "dependencies": {
+    "@academy/i18n": "workspace:*",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

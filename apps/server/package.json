@@ -1,0 +1,28 @@
+{
+  "name": "@academy/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "exports": {
+    ".": "./dist/main.js"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "build": "tsgo -p tsconfig.build.json",
+    "test": "vitest run",
+    "dev": "node --watch --experimental-strip-types src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:effect4",
+    "@effect/sql-pg": "catalog:effect4",
+    "effect": "catalog:effect4",
+    "ioredis": "5.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6"
+  }
+}

@@ -1,0 +1,48 @@
+# Manual sibling deploy of the wave foundation stack. Never triggered by push.
+name: Wave foundation sibling deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character git SHA to deploy beside the legacy app
+        required: true
+        type: string
+      confirm:
+        description: Type deploy-sibling to confirm an operator-initiated deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wave-foundation-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate inputs
+        env:
+          SHA: ${{ inputs.sha }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          [[ "$CONFIRM" == "deploy-sibling" ]] || { echo "confirmation phrase missing"; exit 1; }
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be a full 40-char hex sha"; exit 1; }
+      - name: Rebuild academy-wave on the host
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.ACADEMY_HETZNER_HOST }}
+          username: ${{ secrets.ACADEMY_HETZNER_USER }}
+          key: ${{ secrets.ACADEMY_HETZNER_SSH_KEY }}
+          script_stop: true
+          command_timeout: 28m
+          envs: SHA
+          script: |
+            set -Eeuo pipefail
+            /root/aetherlink-academy-wave/rebuild-wave-foundation.sh "$SHA"
+        env:
+          SHA: ${{ inputs.sha }}
