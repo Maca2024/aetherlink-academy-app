@@ -1,5 +1,9 @@
 import {useEffect, useState, type ReactNode} from 'react';
 import {LanguageToggle, useI18n} from './i18n.tsx';
+import {Deck, type DeckMode} from '@academy/deck';
+import {sourceSlides} from './deck/slides.js';
+import {normalizeSlides} from './deck/normalize.js';
+import './deck/deck.css';
 
 export type RouteId = 'squad' | 'route' | 'lesson' | 'solo' | 'coach' | 'review' | 'connection';
 
@@ -144,9 +148,10 @@ export function ConnectionPanel({state}: {readonly state: ConnectionState}) {
   );
 }
 
-export function useConnection(fetcher: ConnectionFetcher, intervalMs = 5000): ConnectionState {
+export function useConnection(fetcher: ConnectionFetcher, intervalMs = 5000, enabled = true): ConnectionState {
   const [state, setState] = useState<ConnectionState>({kind: 'loading'});
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const tick = async () => {
       const next = await fetcher();
@@ -158,7 +163,7 @@ export function useConnection(fetcher: ConnectionFetcher, intervalMs = 5000): Co
       cancelled = true;
       clearInterval(timer);
     };
-  }, [fetcher, intervalMs]);
+  }, [fetcher, intervalMs, enabled]);
   return state;
 }
 
@@ -178,11 +183,31 @@ export function usePathname(): [string, (path: string) => void] {
 
 export function AppRoutes({children}: {readonly children?: ReactNode}) {
   const [pathname, navigate] = usePathname();
-  const connection = useConnection(fetchConnection);
+  const connection = useConnection(fetchConnection, 5000, pathname !== '/deck');
+  if (pathname === '/deck') return <DeckDemo />;
   return (
     <>
       <Shell pathname={pathname} navigate={navigate} connection={connection} />
       {children}
     </>
   );
+}
+
+const DECK_SLIDES = normalizeSlides(sourceSlides);
+function DeckDemo() {
+  useEffect(() => {
+    const surfaces = [document.documentElement, document.body];
+    const previous = surfaces.map(({style}) => ({value: style.getPropertyValue('background-color'), priority: style.getPropertyPriority('background-color')}));
+    surfaces.forEach(({style}) => style.setProperty('background-color', '#06111e'));
+    return () => surfaces.forEach(({style}, index) => {
+      const saved = previous[index]!;
+      if (saved.value) style.setProperty('background-color', saved.value, saved.priority);
+      else style.removeProperty('background-color');
+    });
+  }, []);
+  const [index, setIndex] = useState(() => { const value = Number(new URLSearchParams(window.location.search).get('index')); return Number.isInteger(value) && value >= 0 && value < DECK_SLIDES.length ? value : 0; });
+  const [revealStep, setRevealStep] = useState(-1);
+  const requested = new URLSearchParams(window.location.search).get('mode');
+  const mode: DeckMode = requested === 'reader' || requested === 'presenter' || requested === 'follow' ? requested : 'projector';
+  return <Deck slides={DECK_SLIDES} index={index} revealStep={revealStep} mode={mode} presence={<span>Presence slot</span>} onIndexChange={(next) => { setIndex(next); setRevealStep(-1); }} onRevealStepChange={setRevealStep}/>;
 }
