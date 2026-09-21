@@ -14,13 +14,14 @@ import {createMcpHandler,validateHostHeader} from '@modelcontextprotocol/server'
 import {toNodeHandler} from '@modelcontextprotocol/node';
 import {lessons,mission,initialDocument,searchKnowledge,getDayPack,listRouteDays} from './content.mjs';
 import {createGoogleSso,readLoginState,signLoginState} from './google-sso.mjs';
+import {createSlidesService} from './slides/runtime.ts';
 const text=(v,max=4000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail(400,`Vul tekst in (maximaal ${max} tekens).`);return v.trim();};
 const namedCookie=(req,name)=>{const value=req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${name}=`))?.slice(name.length+1);if(value===undefined)return;try{return decodeURIComponent(value);}catch{return;}};
 const cookie=req=>namedCookie(req,'academy');
 const bearer=req=>req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7):null;
-export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4400',root=process.cwd(),hostKey,publicBaseUrl=process.env.ACADEMY_PUBLIC_URL||`http://127.0.0.1:${process.env.PORT||4317}`,googleClientId=process.env.GOOGLE_CLIENT_ID,googleClientSecret=process.env.GOOGLE_CLIENT_SECRET,facilitatorDomains=process.env.ACADEMY_FACILITATOR_DOMAINS,signingSecret=process.env.PROOF_COLLAB_SIGNING_SECRET,fetchImpl=fetch}={}){
+export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4400',root=process.cwd(),hostKey,publicBaseUrl=process.env.ACADEMY_PUBLIC_URL||`http://127.0.0.1:${process.env.PORT||4317}`,googleClientId=process.env.GOOGLE_CLIENT_ID,googleClientSecret=process.env.GOOGLE_CLIENT_SECRET,facilitatorDomains=process.env.ACADEMY_FACILITATOR_DOMAINS,signingSecret=process.env.PROOF_COLLAB_SIGNING_SECRET,fetchImpl=fetch,slidesService}={}){
  const publicUrl=new URL(publicBaseUrl);if(!['http:','https:'].includes(publicUrl.protocol)||publicUrl.username||publicUrl.password||publicUrl.search||publicUrl.hash||publicUrl.pathname!=='/')throw Error('ACADEMY_PUBLIC_URL moet een HTTP(S)-origin zonder pad of credentials zijn.');
- const store=repository||new LocalStore(dir);const proof=new Proof(proofBase);const app=express();const proxy=httpProxy.createProxyServer({target:proofBase,ws:true});
+ const store=repository||new LocalStore(dir);const proof=new Proof(proofBase);const slides=slidesService||createSlidesService(repository?{pool:repository.pool,schema:repository.schema}:{dir});const app=express();const proxy=httpProxy.createProxyServer({target:proofBase,ws:true});
  const token=req=>bearer(req)||cookie(req);
  const browser=req=>store.auth(bearer(req)||cookie(req),'browser');
  const suggestionReviewer=({r,s})=>{if(s.personId!=='facilitator'&&s.personId!==r.members[r.driver]?.id)fail(403,'Driver of facilitator beslist over documentvoorstellen.');};
@@ -105,11 +106,25 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
   const {value:h,actor,quote}=saved.intent;await proof.comment(r,actor,`Overdracht\nBesluit: ${h.decision}\nGecontroleerd: ${h.checked}\nOpen: ${h.open}\nVolgende eigenaar: ${h.next}`,quote,h.id);
   res.json(await store.completeRequest(token(req),'handoff',key,fingerprint,context=>{context.r.handoffs.push(h);return h;}));
  }));
+
+ // Slide decks (Effect-TS module, server/slides). Same squad session, no model call.
+ const deckActor=({r,s,p})=>({roomId:r.id,id:s.personId,name:p?.name||s.displayName||'Facilitator',role:s.personId==='facilitator'?'facilitator':'participant',source:s.kind==='mcp'?'ai':'human'});
+ const deckId=req=>String(req.params.deckId||'');
+ app.get('/game/decks',wrap(async(req,res)=>res.json(await slides.run('listDecks',deckActor(await browser(req))))));
+ app.post('/game/decks',wrap(async(req,res)=>res.status(201).json(await slides.run('createDeck',deckActor(await browser(req)),req.body))));
+ app.get('/game/decks/:deckId',wrap(async(req,res)=>res.json(await slides.run('getDeck',deckActor(await browser(req)),{deckId:deckId(req),slideId:req.query.slideId||undefined,compact:req.query.compact==='true'}))));
+ app.post('/game/decks/:deckId/slides',wrap(async(req,res)=>res.status(201).json(await slides.run('addSlide',deckActor(await browser(req)),{...req.body,deckId:deckId(req)}))));
+ app.patch('/game/decks/:deckId/slides/:slideId',wrap(async(req,res)=>res.json(await slides.run('updateSlide',deckActor(await browser(req)),{...req.body,deckId:deckId(req),slideId:String(req.params.slideId)}))));
+ app.patch('/game/decks/:deckId',wrap(async(req,res)=>res.json(await slides.run('patchDeck',deckActor(await browser(req)),{...req.body,deckId:deckId(req)}))));
+ app.post('/game/decks/:deckId/duplicate',wrap(async(req,res)=>res.status(201).json(await slides.run('duplicateDeck',deckActor(await browser(req)),{deckId:deckId(req)}))));
+ app.delete('/game/decks/:deckId',wrap(async(req,res)=>res.json(await slides.run('deleteDeck',deckActor(await browser(req)),{deckId:deckId(req)}))));
+ app.get('/game/decks/:deckId/export.html',wrap(async(req,res)=>{const result=await slides.run('exportHtml',deckActor(await browser(req)),{deckId:deckId(req)});res.type('text/html').set('Content-Disposition',`attachment; filename="${result.filename}"`).set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: data:; font-src https: data:").send(result.html);}));
  async function executeMcp(token,tool,input){const a=await store.auth(token,'mcp');const {r,p}=a;if(!p)fail(403,'Geen deelnemer.');let result;
   switch(tool){case 'get_mission':{const pack=getDayPack(r.day);result={session:{roomId:r.id,participantId:p.id,participantName:p.name,squadName:r.name},mission:pack?.mission||mission,day:r.day,phase:r.phase,route:p.route,role:r.members[r.driver]?.id===p.id?'Driver':'Navigator',coach:'Leg begrippen uit, citeer les-IDs, pas hints aan de hulpkeuze aan. Lees eerst de gedeelde intent. Geen browserchat of model-API vanuit de game.'};break;}
   case 'get_document':result=await proof.state(r);break;
   case 'search_knowledge':result={lessons:searchKnowledge(String(input.query||''))};break;
   case 'submit_evidence':result=await evidence(token,input);break;
+  case 'list_decks':case 'get_deck':case 'create_deck':case 'add_slide':case 'update_slide':case 'patch_deck':case 'export_deck_html':{const action={list_decks:'listDecks',get_deck:'getDeck',create_deck:'createDeck',add_slide:'addSlide',update_slide:'updateSlide',patch_deck:'patchDeck',export_deck_html:'exportHtml'}[tool];result=await slides.run(action,deckActor(a),input||{});break;}
   case 'suggest_document':result=await proof.suggest(r,`ai:${p.name}:${p.id}`,text(input.quote),text(input.content),`${p.id}:${text(input.requestId,100)}`);break;
   default:fail(404,'Onbekende MCP-tool.');}
   await store.withSession(token,'mcp',({p})=>{p.lastMcp=new Date().toISOString();});return result;}
@@ -129,5 +144,5 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.use(express.static(path.join(root,'dist')));app.get('/',(_req,res)=>res.sendFile(path.join(root,'dist/index.html')));
  app.use((e,req,res,_next)=>{if(!e.status)console.error('[academy] unhandled',{method:req.method,path:req.path,message:e?.message,stack:e?.stack});return res.status(e.status||500).json({error:e.status?e.message:'Onverwachte serverfout. Probeer opnieuw; je invoer blijft staan.'});});
  const server=http.createServer(app);server.on('upgrade',async(req,socket,head)=>{try{const {r}=await browser(req);const url=new URL(req.url,'http://localhost');if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`)fail(403,'Origin');if(url.pathname!=='/ws'||url.searchParams.get('slug')!==r.proof.slug)fail(403,'Kamer');proxy.ws(req,socket,head);}catch(e){console.warn('WS denied',new URL(req.url,'http://localhost').pathname,e.message);socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');socket.destroy();}});
- return {app,server,store,proof};
+ return {app,server,store,proof,slides};
 }

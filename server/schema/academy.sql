@@ -45,3 +45,11 @@ CREATE TABLE IF NOT EXISTS requests (
  result jsonb,
  PRIMARY KEY (room_id, person_id, kind, request_id)
 );
+CREATE TABLE IF NOT EXISTS decks (
+ id uuid PRIMARY KEY,
+ room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+ revision integer NOT NULL,
+ data jsonb NOT NULL,
+ updated_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS decks_room ON decks(room_id, updated_at);
