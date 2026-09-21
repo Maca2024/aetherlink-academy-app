@@ -7,9 +7,18 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "vite build",
+    "build": "pnpm run build:legacy && pnpm run build:workspace",
+    "build:legacy": "vite build",
+    "build:workspace": "pnpm --recursive --filter './apps/**' --filter './packages/**' run build",
+    "typecheck": "pnpm --recursive --filter './apps/**' --filter './packages/**' run typecheck",
+    "test": "pnpm --recursive --filter './apps/**' --filter './packages/**' run test",
+    "test:e2e": "pnpm --filter @academy/web run test:e2e",
+    "test:services": "ACADEMY_WAVE_DOCKER_TEST=1 pnpm --filter @academy/server run test",
+    "test:legacy": "node --import ./vendor/proof-sdk/node_modules/tsx/dist/loader.mjs --test tests/*.test.mjs tests/*.test.ts",
+    "dev": "pnpm --recursive --parallel --filter './apps/**' run dev",
     "start": "node scripts/start.mjs",
-    "test": "node --import ./vendor/proof-sdk/node_modules/tsx/dist/loader.mjs --test tests/*.test.mjs tests/*.test.ts",
+    "start:legacy": "node scripts/start.mjs",
+    "tsc6": "tsc6",
     "mcp": "node server/mcp.mjs"
   },
   "dependencies": {
@@ -30,9 +39,12 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "@typescript/typescript6": "6.0.2",
     "@vitejs/plugin-react": "4.3.4",
     "jsdom": "26.1.0",
-    "vite": "6.4.3"
+    "vite": "6.4.3",
+    "vitest": "5.0.1"
   },
   "packageManager": "pnpm@11.19.0"
 }

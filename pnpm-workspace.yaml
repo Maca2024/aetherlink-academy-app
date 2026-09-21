@@ -1,2 +1,18 @@
+packages:
+  - apps/*
+  - packages/*
+
 allowBuilds:
   esbuild: true
+
+catalogs:
+  effect4:
+    effect: 4.0.0-rc.117
+    '@effect/sql-pg': 4.0.0-rc.117
+    '@effect/platform-node': 4.0.0-rc.117
+
+minimumReleaseAgeExclude:
+  - '@effect/platform-node-shared@4.0.0-rc.117'
+  - '@effect/platform-node@4.0.0-rc.117'
+  - '@effect/sql-pg@4.0.0-rc.117'
+  - effect@4.0.0-rc.117

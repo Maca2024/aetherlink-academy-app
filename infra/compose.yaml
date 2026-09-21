@@ -1,0 +1,164 @@
+# Sibling stack for the AET-20 wave foundation. Runs next to the legacy app
+# (root compose.yaml, :4317) and never touches its containers or volumes.
+# Operator invocation only: see infra/deploy/README.md.
+name: academy-wave
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+    image: aetherlink-academy-wave:${SOURCE_REVISION:-local}
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4318"
+      PROOF_URL: http://proof:4418
+      DATABASE_URL: postgresql://academy:${POSTGRES_PASSWORD}@postgres:5432/academy?sslmode=require
+      REDIS_URL: rediss://:${REDIS_PASSWORD}@redis:6379
+      NODE_EXTRA_CA_CERTS: /tls/ca.crt
+      SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+      ACADEMY_WEB_DIST: /app/apps/web/dist
+    ports:
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - academy-wave-tls:/tls:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [academy-wave-net]
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  proof:
+    image: aetherlink-academy-wave:${SOURCE_REVISION:-local}
+    command: ["node", "--import", "tsx", "server/index.ts"]
+    working_dir: /app/vendor/proof-sdk
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4418"
+      DATABASE_URL: postgresql://academy:${POSTGRES_PASSWORD}@postgres:5432/academy?sslmode=require
+      REDIS_URL: rediss://:${REDIS_PASSWORD}@redis:6379
+      NODE_EXTRA_CA_CERTS: /tls/ca.crt
+      PROOF_DATABASE_SCHEMA: ${PROOF_DATABASE_SCHEMA:-proof_wave}
+      PROOF_REDIS_PREFIX: ${PROOF_REDIS_PREFIX:-proof-wave}
+      COLLAB_ATTACH_TO_MAIN_HTTP: "true"
+      PROOF_PUBLIC_BASE_URL: ${ACADEMY_PUBLIC_URL:-http://127.0.0.1:4318}
+      VITE_ENABLE_TELEMETRY: "false"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4418/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [academy-wave-net]
+    volumes:
+      - academy-wave-tls:/tls:ro
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: academy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: academy
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/tls/postgres.crt
+      - -c
+      - ssl_key_file=/tls/postgres.key
+      - -c
+      - hba_file=/tls/pg_hba.conf
+    volumes:
+      - academy-wave-postgres:/var/lib/postgresql/data
+      - academy-wave-tls:/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U academy -d academy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [academy-wave-net]
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --port
+      - "0"
+      - --tls-port
+      - "6379"
+      - --tls-cert-file
+      - /tls/redis.crt
+      - --tls-key-file
+      - /tls/redis.key
+      - --tls-ca-cert-file
+      - /tls/ca.crt
+      - --tls-auth-clients
+      - "no"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - academy-wave-tls:/tls:ro
+      - academy-wave-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/tls/ca.crt", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    networks: [academy-wave-net]
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  tls-init:
+    image: postgres:16
+    entrypoint: ["/usr/local/bin/init-tls.sh"]
+    command: ["/tls"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - academy-wave-tls:/tls
+      - ./deploy/init-tls.sh:/usr/local/bin/init-tls.sh:ro
+    networks: [academy-wave-net]
+    restart: "no"
+
+networks:
+  academy-wave-net:
+
+volumes:
+  academy-wave-postgres:
+  academy-wave-redis:
+  academy-wave-tls:
