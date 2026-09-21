@@ -1,0 +1,19 @@
+import {Effect, Schema} from 'effect';
+import {defineAction} from '../action.ts';
+import {EmptyInput} from '../schemas.ts';
+import {ClassroomState, requireRoom} from './state.ts';
+
+export const getParticipantCount = defineAction({
+  name: 'getParticipantCount',
+  input: EmptyInput,
+  output: Schema.Struct({participantCount: Schema.Number}),
+  scope: 'both',
+  intent: 'read',
+  run: (_input, caller) =>
+    Effect.gen(function* () {
+      const state = yield* ClassroomState;
+      yield* requireRoom(state, caller.roomId);
+      const participantCount = yield* state.getParticipantCount;
+      return {participantCount};
+    }),
+});
