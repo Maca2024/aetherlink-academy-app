@@ -6,4 +6,5 @@ export class Proof {
  state(r){return this.request(`/documents/${r.proof.slug}/state`,r.proof.editor);}
  async comment(r,by,text,quote,key){if(!quote){const state=await this.state(r);quote=state.markdown.split('\n').find(line=>line.trim()).replace(/^#+\s*/,'').trim();}return this.request(`/documents/${r.proof.slug}/bridge/comments`,r.proof.commenter,{by,text,quote},key);}
  suggest(r,by,quote,content,key){return this.request(`/documents/${r.proof.slug}/bridge/suggestions`,r.proof.commenter,{by,kind:'replace',quote,content},key);}
+ suggestionReview(r,decision,markId,by,key){return this.request(`/api/agent/${r.proof.slug}/marks/${decision}`,r.proof.editor,{markId,by},key);}
 }
