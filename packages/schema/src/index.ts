@@ -1,22 +1,18 @@
 import {Schema} from 'effect';
+import {LessonId, LocalizedText, SlideId} from './shared.ts';
 
-const IdText = Schema.String.pipe(Schema.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,64}$/)));
-export const SlideId = IdText.pipe(Schema.brand('SlideId'));
-export type SlideId = Schema.Schema.Type<typeof SlideId>;
-export const LessonId = IdText.pipe(Schema.brand('LessonId'));
-export type LessonId = Schema.Schema.Type<typeof LessonId>;
-
-/** Source decks use plain English strings. The object form carries an optional Dutch translation. */
-export const LocalizedText = Schema.Struct({en: Schema.String, nl: Schema.optional(Schema.String)});
-export type LocalizedText = Schema.Schema.Type<typeof LocalizedText>;
+export {LessonId, LocalizedText, SlideId};
 
 export const SlideType = Schema.Literals(['context', 'concept', 'practice', 'review', 'recap', 'pause']);
-export const SlideLayout = Schema.Literals(['pillars', 'steps', 'compare', 'exercise', 'recap']);
+/** 8 named layouts plus an omitted default card-grid, per the training-template + classroom-slides source audit. */
+export const SlideLayout = Schema.Literals(['pillars', 'steps', 'compare', 'exercise', 'recap', 'cards', 'image', 'bars']);
 
 const Text = Schema.String;
 const Card = Schema.Struct({title: Text, body: Text});
 const Item = Schema.Struct({label: Text, caption: Schema.optional(Text), detail: Schema.optional(Text)});
 const Column = Schema.Struct({title: Text, items: Schema.Array(Text), foot: Schema.optional(Text)});
+const BarStage = Schema.Struct({name: Text, w: Schema.Number, accent: Schema.optional(Schema.Boolean), ghost: Schema.optional(Schema.Boolean)});
+const Bars = Schema.Struct({stages: Schema.Array(BarStage), scale: Text, caption: Text});
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | {readonly [key: string]: JsonValue};
 const JsonValue: Schema.Codec<JsonValue, JsonValue> = Schema.suspend((): Schema.Codec<JsonValue, JsonValue> => Schema.Union([
@@ -51,6 +47,12 @@ const PublicSlideFields = {
   dark: Schema.optional(Schema.Boolean),
   visual: Schema.optional(Visual),
   image: Schema.optional(Text),
+  imageAlt: Schema.optional(Text),
+  imageCaption: Schema.optional(Text),
+  keepCards: Schema.optional(Schema.Boolean),
+  mascot: Schema.optional(Schema.Boolean),
+  concepts: Schema.optional(Schema.Array(Text)),
+  bars: Schema.optional(Bars),
   planB: Schema.optional(Text),
 } as const;
 
@@ -76,3 +78,14 @@ export const participantSlide = (slide: Slide): Schema.Schema.Type<typeof Partic
 
 export const decodeSlide = (input: unknown): Slide => Schema.decodeUnknownSync(Slide)(input);
 export const encodeSlide = (slide: Slide): unknown => Schema.encodeSync(Slide)(slide);
+
+export * from './ids.ts';
+export * from './course.ts';
+export * from './lesson.ts';
+export * from './assignment.ts';
+export * from './quiz.ts';
+export * from './room.ts';
+export * from './realtime.ts';
+export * from './progress.ts';
+export * from './chat.ts';
+export * from './credential.ts';

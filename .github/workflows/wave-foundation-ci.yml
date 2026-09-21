@@ -69,6 +69,8 @@ jobs:
       - run: pnpm --dir vendor/proof-sdk rebuild better-sqlite3 esbuild
       - name: Real Postgres/Redis outage and recovery with a live Proof child
         run: pnpm run test:services
+      - name: Versioned curriculum on isolated PostgreSQL
+        run: pnpm --filter @academy/server run test:curriculum-db
 
   container:
     runs-on: ubuntu-latest
