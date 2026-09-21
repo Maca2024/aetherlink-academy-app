@@ -9,6 +9,32 @@ const examples = [
   {...base, id: 'slide-compare', layout: 'compare' as const, columns: [{title: 'A', items: ['one']}]},
   {...base, id: 'slide-exercise', layout: 'exercise' as const, steps: ['Do it'], timer: 25},
   {...base, id: 'slide-recap', layout: 'recap' as const, items: [{label: 'Done'}]},
+  {...base, id: 'slide-cards', layout: 'cards' as const, cards: [{title: 'Plan', body: 'Design before build'}]},
+  {
+    ...base,
+    id: 'slide-image',
+    layout: 'image' as const,
+    image: 'intent-md.svg',
+    imageAlt: 'intent.md brief feeding design, build and review.',
+    imageCaption: 'What, why and boundaries feed design, build and review.',
+    keepCards: true,
+    cards: [],
+  },
+  {
+    ...base,
+    id: 'slide-bars',
+    layout: 'bars' as const,
+    bars: {
+      stages: [
+        {name: 'Plan', w: 10},
+        {name: 'Build', w: 44, accent: true},
+        {name: 'Maintain', w: 12, ghost: true},
+      ],
+      scale: 'Before agents · every stage at human speed',
+      caption: 'Build is the long pole.',
+    },
+  },
+  {...base, id: 'slide-mascot', mascot: true, concepts: ['What an agent is — the agentic loop']},
 ];
 
 describe('Slide schema', () => {
