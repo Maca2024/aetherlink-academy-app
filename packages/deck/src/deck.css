@@ -1,0 +1,35 @@
+@import './source.css';
+@font-face { font-family: Nunito; src: url('/fonts/nunito-latin.woff2') format('woff2'); font-weight: 600 900; font-style: normal; font-display: swap; unicode-range: U+0000-FFFF; }
+
+/* The React shell keeps the source engine's geometry and classes. These small
+   adapters scope only the reader/presenter additions to the mounted deck. */
+.academy-deck { min-height: 100vh; }
+.academy-deck {
+  --bg: #06111e; --surface: #0c1928; --surface2: #102238; --text: #e9f0fc;
+  --muted: #a6b8d2; --border: #233c55; --cyan: #69e2f2; --violet: #b99aff;
+  --amber: #ffb545; --ok: #3ddc84; --ink: #06111e;
+  --concept: var(--cyan); --practice: var(--amber); --review: var(--violet);
+  --recap: #7d93b2; --pause: #57708c; --context: #3f5b78;
+  display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  font-family: Nunito, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.academy-deck.spotlight { --bg: #02070d; --surface: #081422; --surface2: #0c1a2b; }
+.academy-deck .brand { background: transparent; }
+.academy-deck .eyebrow { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; margin: 0 0 .8rem; font-size: 1rem; color: inherit; letter-spacing: normal; }
+.academy-deck #stage { gap: 0; }
+.academy-deck .tagline { color: var(--amber); }
+.academy-deck button { color: var(--text); background: var(--surface2); border-color: var(--border); }
+.academy-deck .presenter-btn { background: linear-gradient(105deg, var(--aether-purple, #5b3fff), var(--aether-orange, #ff7a1a)); color: #fff; border-color: transparent; }
+.academy-deck .controls { border-top: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem; }
+.academy-deck .reader-lesson { display: grid; gap: 3rem; margin-top: 3rem; }
+.academy-deck .reader-lesson article { border-top: 1px solid var(--border); padding-top: 1.5rem; }
+.academy-deck .reader-lesson h2 { font-size: 1.5rem; }
+.academy-deck .deck-dialog { border: 0; border-radius: 1rem; padding: 1.5rem; width: min(720px, calc(100vw - 2rem)); color: var(--text); background: var(--surface); box-shadow: 0 20px 70px #0005; }
+.academy-deck .deck-dialog textarea { display: block; width: 100%; min-height: 12rem; margin: 1rem 0; padding: .75rem; }
+.academy-deck .deck-dialog button { margin: .25rem; }
+.academy-deck .deck-chapters { display: grid; gap: .4rem; max-height: 60vh; overflow: auto; margin-top: 1rem; }
+.academy-deck .deck-presenter-tools { margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.academy-deck .deck-presenter-tools section { margin-top: 1rem; }
+.academy-deck .deck-presenter-tools textarea { width: 100%; min-height: 6rem; }
+.academy-deck .deck-presence { border: 1px dashed var(--violet); padding: .5rem; color: var(--violet); }
+.academy-deck.mode-reader #stage > .reader-lesson { padding-bottom: 2rem; }

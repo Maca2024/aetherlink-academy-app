@@ -1,0 +1,74 @@
+name: Deck acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deck-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_DECK_DIR: /tmp/academy-deck-reference
+      SOURCE_DECK_URL: http://127.0.0.1:8787/index.html
+      BEHAVIOR_OUTPUT: /tmp/academy-deck-evidence/behavior
+      PARITY_OUTPUT: /tmp/academy-deck-evidence/parity
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: '11.19.0'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.x'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @academy/deck exec playwright install --with-deps chromium
+      - name: Fetch the pinned reference deck
+        run: |
+          git init "$SOURCE_DECK_DIR"
+          git -C "$SOURCE_DECK_DIR" remote add origin https://github.com/jyse/aetherlink-classroom-slides.git
+          git -C "$SOURCE_DECK_DIR" fetch --depth 1 origin 0c194f6fc38481290922b878ac5a7d31ca795c8d
+          git -C "$SOURCE_DECK_DIR" checkout --detach FETCH_HEAD
+      - run: pnpm --filter @academy/web build
+      - name: Start reference, development fixture, and production preview
+        run: |
+          mkdir -p "/tmp/academy-deck-evidence"
+          python3 -m http.server 8787 --bind 127.0.0.1 --directory "$SOURCE_DECK_DIR" > "/tmp/academy-deck-evidence/source.log" 2>&1 &
+          pnpm --filter @academy/web exec vite --host 127.0.0.1 --port 5178 --strictPort > "/tmp/academy-deck-evidence/dev.log" 2>&1 &
+          pnpm --filter @academy/web exec vite preview --host 127.0.0.1 --port 5179 --strictPort > "/tmp/academy-deck-evidence/preview.log" 2>&1 &
+          for port in 8787 5178 5179; do
+            ready=0
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent "http://127.0.0.1:$port/" > /dev/null; then ready=1; break; fi
+              sleep 1
+            done
+            test "$ready" = 1
+          done
+      - name: Browser behavior and controlled React fixture
+        env:
+          DECK_URL: http://127.0.0.1:5178/deck
+        run: pnpm --filter @academy/deck exec node scripts/behavior.mjs
+      - name: All 234 production screenshot comparisons
+        env:
+          DECK_URL: http://127.0.0.1:5179/deck
+        run: pnpm --filter @academy/deck exec node scripts/parity.mjs
+      - name: Preserve exact-head reports and failure images
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deck-acceptance-${{ github.sha }}
+          path: /tmp/academy-deck-evidence
+          if-no-files-found: error
+          retention-days: 14
