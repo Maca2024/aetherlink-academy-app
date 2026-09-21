@@ -163,6 +163,8 @@ importers:
         specifier: 0.25.12
         version: 0.25.12
 
+  packages/course-contract: {}
+
   packages/deck:
     dependencies:
       '@academy/schema':

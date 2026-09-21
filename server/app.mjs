@@ -15,6 +15,8 @@ import {toNodeHandler} from '@modelcontextprotocol/node';
 import {lessons,mission,initialDocument,searchKnowledge,getDayPack,listRouteDays} from './content.mjs';
 import {createGoogleSso,readLoginState,signLoginState} from './google-sso.mjs';
 import {createSlidesService} from './slides/runtime.ts';
+import {COURSE_IDS,isCourseId,publicCourses} from './courses.mjs';
+import {completeWithLiteLLM,publicAiConfig} from './ai-gateway.mjs';
 const text=(v,max=4000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail(400,`Vul tekst in (maximaal ${max} tekens).`);return v.trim();};
 const namedCookie=(req,name)=>{const value=req.headers.cookie?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${name}=`))?.slice(name.length+1);if(value===undefined)return;try{return decodeURIComponent(value);}catch{return;}};
 const cookie=req=>namedCookie(req,'academy');
@@ -55,7 +57,7 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.post('/auth/logout',wrap(async(req,res)=>{await store.facilitatorLogout(namedCookie(req,'academy-facilitator'));res.clearCookie('academy-facilitator',loginCookie);res.status(204).end();}));
  app.get('/game/config',(_req,res)=>res.json({googleSso:googleSso.enabled}));
  app.get('/game/facilitator/me',wrap(async(req,res)=>{const identity=await store.facilitator(namedCookie(req,'academy-facilitator'));if(!identity)return res.status(401).json({error:'Geen geldige facilitator-login.'});res.json({email:identity.email,name:identity.name});}));
- app.post('/game/create',wrap(async(req,res)=>{const identity=await requireFacilitator(req),name=text(req.body.name,60),p=await proof.create(initialDocument,name+' — Onze intent');setSession(res,await store.create(name,p,identity&&{email:identity.email,name:identity.name}));}));
+ app.post('/game/create',wrap(async(req,res)=>{const identity=await requireFacilitator(req),name=text(req.body.name,60),courseId=req.body?.courseId||COURSE_IDS.SUPPORT;if(!isCourseId(courseId))fail(400,'Onbekende cursus.');const p=await proof.create(initialDocument,name+' — Onze intent');setSession(res,await store.create(name,p,identity&&{email:identity.email,name:identity.name},courseId));}));
  app.post('/game/join',wrap(async(req,res)=>setSession(res,await store.join(text(req.body.code,15),text(req.body.name,50)))));
  app.post('/game/facilitator/overview',wrap(async(req,res)=>{await requireFacilitator(req);res.json(await store.overview());}));
  app.post('/game/facilitator/attach',wrap(async(req,res)=>{const identity=await requireFacilitator(req);setSession(res,await store.attachFacilitator(text(req.body.roomId,60),identity?.name));}));
@@ -65,14 +67,37 @@ export function createApp({dir,repository,presence,proofBase='http://127.0.0.1:4
  app.post('/game/resume',wrap(async(req,res)=>{await browser(req);res.cookie('academy',bearer(req),{httpOnly:true,sameSite:'strict',secure:publicUrl.protocol==='https:',path:'/'});res.json({ok:true});}));
  app.get('/game/state',wrap(async(req,res)=>{const {r,s,p}=await browser(req);if(p){if(presence)await presence.touch(r.id,p.id);else store.live.set(p.id,Date.now());}const view=store.view(r,s);if(presence){const online=await presence.members(r.id,r.members.map(m=>m.id));view.members.forEach(m=>m.online=online.has(m.id));}res.json(view);}));
  app.post('/game/control',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({r,s})=>{if(s.personId!=='facilitator')fail(403,'Alleen de facilitator bedient de ronde.');const value=['time','duration'].includes(req.body.action)?Number(req.body.value):req.body.value;Store.prototype.control.call({remaining:store.remaining,save(){}},r,req.body.action,value);return store.view(r,s);})))) ;
+ app.get('/game/courses',wrap(async(req,res)=>{const {r}=await browser(req);res.json(publicCourses({selectedCourseId:r.courseId}));}));
+ app.get('/game/ai/config',wrap(async(req,res)=>{await browser(req);res.json(publicAiConfig());}));
+ const aiContext=(r,p,prompt,lessonId)=>[
+  {role:'system',content:'Je bent de tutor van Worldline AI-First Academy. Help de deelnemer leren door eerst te verduidelijken, daarna een compact antwoord en een kleine volgende stap te geven. Blijf binnen de cursuscontext. Claim nooit dat je code, tests of systemen hebt uitgevoerd. Deel geen geheimen en vraag er niet om. Je antwoord wordt via de veilige LiteLLM-gateway met Claude geleverd.'},
+  {role:'user',content:`Cursus: Worldline AI-First Academy\nDeelnemer: ${p.name}\nLes: ${lessonId||'algemene cursuscontext'}\nVraag: ${prompt}`},
+ ];
+ app.post('/game/ai/tutor',wrap(async(req,res)=>{const {r,p}=await browser(req);
+  if(!p)fail(403,'Alleen deelnemers kunnen de AI-tutor gebruiken.');
+  const courseId=req.body?.courseId||COURSE_IDS.WORLDLINE;
+  if(courseId!==COURSE_IDS.WORLDLINE)fail(400,'De AI-tutor hoort bij de Worldline-cursus.');
+  const prompt=text(req.body?.prompt,4000),lessonId=req.body?.lessonId;
+  if(lessonId!==undefined&&(!('string'===typeof lessonId&&worldlineId.test(lessonId))))fail(400,'Ongeldige les.');
+  res.json(await completeWithLiteLLM({messages:aiContext(r,p,prompt,lessonId),kind:'tutor'}));}));
+ app.post('/game/ai/evaluate',wrap(async(req,res)=>{const {r,p}=await browser(req);
+  if(!p)fail(403,'Alleen deelnemers kunnen werk laten evalueren.');
+  const courseId=req.body?.courseId||COURSE_IDS.WORLDLINE;
+  if(courseId!==COURSE_IDS.WORLDLINE)fail(400,'De evaluator hoort bij de Worldline-cursus.');
+  const submission=text(req.body?.submission,4000),rubric=text(req.body?.rubric||'Beoordeel helderheid, onderbouwing en een concrete volgende stap.',1600),lessonId=req.body?.lessonId;
+  if(lessonId!==undefined&&(!('string'===typeof lessonId&&worldlineId.test(lessonId))))fail(400,'Ongeldige les.');
+  res.json(await completeWithLiteLLM({kind:'evaluator',messages:[
+   {role:'system',content:'Je bent een zorgvuldige leer-evaluator voor Worldline AI-First Academy. Geef feedback op basis van de rubric, benoem wat aantoonbaar goed is, wat ontbreekt en één concrete verbetering. Geef geen cijfer zonder bewijs en claim geen uitgevoerde tests.'},
+   {role:'user',content:`Les: ${lessonId||'algemene cursuscontext'}\nRubric: ${rubric}\nInzending:\n${submission}`},
+  ]}));}));
  app.get('/game/knowledge',wrap(async(req,res)=>{const {r}=await browser(req);const pack=getDayPack(r.day);res.json({lessons:searchKnowledge(String(req.query.q||'')),mission:pack?.mission||mission});}));
  const publicDayPack=pack=>({...pack,quiz:{questions:pack.quiz.questions}});
  app.get('/game/day-pack',wrap(async(req,res)=>{const {r}=await browser(req),pack=getDayPack(r.day);if(!pack)fail(400,`Geen contentpakket voor supportdag ${r.day}.`);res.json(publicDayPack(pack));}));
  app.get('/game/day-route',wrap(async(req,res)=>{const {r,p}=await browser(req);res.json({day:r.day,days:listRouteDays().map(d=>({...d,progress:dayProgress(r,p,d.day)}))});}));
  const worldlineId=/^[a-z0-9][a-z0-9_-]{1,120}$/;
- const worldlineProgress=p=>{const value=p?.worldlineProgress||{};return {completedLessonIds:Array.isArray(value.completedLessonIds)?value.completedLessonIds.filter(id=>typeof id==='string'&&worldlineId.test(id)):[],completedExerciseIds:Array.isArray(value.completedExerciseIds)?value.completedExerciseIds.filter(id=>typeof id==='string'&&worldlineId.test(id)):[],activeLessonId:typeof value.activeLessonId==='string'&&worldlineId.test(value.activeLessonId)?value.activeLessonId:null,updatedAt:value.updatedAt||null};};
+ const worldlineProgress=p=>{const value=p?.worldlineProgress||{};return {version:1,courseId:COURSE_IDS.WORLDLINE,completedLessonIds:Array.isArray(value.completedLessonIds)?value.completedLessonIds.filter(id=>typeof id==='string'&&worldlineId.test(id)):[],completedExerciseIds:Array.isArray(value.completedExerciseIds)?value.completedExerciseIds.filter(id=>typeof id==='string'&&worldlineId.test(id)):[],activeLessonId:typeof value.activeLessonId==='string'&&worldlineId.test(value.activeLessonId)?value.activeLessonId:null,updatedAt:value.updatedAt||null};};
  app.get('/game/worldline-progress',wrap(async(req,res)=>{const {p}=await browser(req);res.json({...worldlineProgress(p),canWrite:Boolean(p)});}));
- app.post('/game/worldline-progress',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({p})=>{if(!p)fail(403,'Alleen deelnemers slaan cursusvoortgang op.');const lessonId=req.body?.lessonId,exerciseId=req.body?.exerciseId;for(const id of [lessonId,exerciseId,req.body?.activeLessonId])if(id!==undefined&&(!('string'===typeof id&&worldlineId.test(id))))fail(400,'Ongeldig cursusonderdeel.');const completed=req.body?.completed!==false;p.worldlineProgress=worldlineProgress(p);if(lessonId){const ids=new Set(p.worldlineProgress.completedLessonIds);completed?ids.add(lessonId):ids.delete(lessonId);p.worldlineProgress.completedLessonIds=[...ids];}if(exerciseId){const ids=new Set(p.worldlineProgress.completedExerciseIds);completed?ids.add(exerciseId):ids.delete(exerciseId);p.worldlineProgress.completedExerciseIds=[...ids];}if(req.body?.activeLessonId!==undefined)p.worldlineProgress.activeLessonId=req.body.activeLessonId;p.worldlineProgress.updatedAt=new Date().toISOString();return p.worldlineProgress;}))));
+ app.post('/game/worldline-progress',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({p})=>{if(!p)fail(403,'Alleen deelnemers slaan cursusvoortgang op.');if(req.body?.courseId&&req.body.courseId!==COURSE_IDS.WORLDLINE)fail(400,'Ongeldige cursus.');const lessonId=req.body?.lessonId,exerciseId=req.body?.exerciseId;for(const id of [lessonId,exerciseId,req.body?.activeLessonId])if(id!==undefined&&id!==null&&(!('string'===typeof id&&worldlineId.test(id))))fail(400,'Ongeldig cursusonderdeel.');const completed=req.body?.completed!==false;p.worldlineProgress=worldlineProgress(p);if(lessonId){const ids=new Set(p.worldlineProgress.completedLessonIds);completed?ids.add(lessonId):ids.delete(lessonId);p.worldlineProgress.completedLessonIds=[...ids];}if(exerciseId){const ids=new Set(p.worldlineProgress.completedExerciseIds);completed?ids.add(exerciseId):ids.delete(exerciseId);p.worldlineProgress.completedExerciseIds=[...ids];}if(req.body?.activeLessonId!==undefined)p.worldlineProgress.activeLessonId=req.body.activeLessonId;p.worldlineProgress.updatedAt=new Date().toISOString();return p.worldlineProgress;}))));
  app.post('/game/reflection',wrap(async(req,res)=>res.json(await store.withSession(token(req),'browser',({r,p})=>{if(!p)fail(403,'Alleen deelnemers schrijven een eigen reflectie.');const reflection={learned:text(req.body.learned),next:text(req.body.next),at:new Date().toISOString()};p.progressByDay??={};p.progressByDay[String(r.day)]={...p.progressByDay[String(r.day)],reflection};return reflection;}))));
  app.get('/game/debrief',wrap(async(req,res)=>{const {r,s}=await browser(req);if(s.personId!=='facilitator')fail(403,'Alleen de facilitator bekijkt de debrief.');res.json(debrief(r));}));
  app.get('/game/debrief/export',wrap(async(req,res)=>{const {r,s}=await browser(req);if(s.personId!=='facilitator')fail(403,'Alleen de facilitator exporteert de debrief.');res.type('text/markdown').set('Content-Disposition','attachment; filename="squad-overdracht.md"').send(exportDebrief(r));}));

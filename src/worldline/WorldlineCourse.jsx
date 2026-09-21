@@ -1,7 +1,8 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {ArrowRight, Check, ChevronDown, Circle, Clock, GraduationCap, LockKeyhole, Sparkles} from 'lucide-react';
+import {ArrowRight, Bot, Check, ChevronDown, Circle, Clock, GraduationCap, LockKeyhole, MessageCircle, Send, Sparkles} from 'lucide-react';
 import {api} from '../api';
 import {useI18n} from '../i18n';
+import {COURSE_IDS} from '../../packages/course-contract/index.mjs';
 import {
   curriculum,
   getLocalizedDay,
@@ -15,6 +16,58 @@ const allExercises = allLessons.flatMap((lesson) => lesson.exercises || []);
 const firstLessonId = allLessons[0]?.id || null;
 
 const copy = (locale, en, nl) => locale === 'nl' ? nl : en;
+
+function AiStudio({room, lesson, locale}) {
+  const [config, setConfig] = useState(null);
+  const [mode, setMode] = useState('tutor');
+  const [prompt, setPrompt] = useState('');
+  const [rubric, setRubric] = useState('');
+  const [answer, setAnswer] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    api('ai/config').then((next) => active && setConfig(next)).catch((cause) => active && setError(cause.message));
+    return () => { active = false; };
+  }, []);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!prompt.trim() || room.me.role === 'Facilitator') return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = mode === 'tutor'
+        ? await api('ai/tutor', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, prompt})
+        : await api('ai/evaluate', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, submission: prompt, rubric: rubric || undefined});
+      setAnswer(next);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const configured = config?.configured;
+  return <section className="worldline-ai" aria-labelledby="worldline-ai-title">
+    <div className="worldline-ai-heading">
+      <div><p className="worldline-section-label"><span><Bot size={14}/> {copy(locale, 'CLAUDE LEARNING STUDIO', 'CLAUDE LEARNING STUDIO')}</span></p><h4 id="worldline-ai-title">{mode === 'tutor' ? copy(locale, 'Ask your Claude tutor', 'Vraag je Claude-tutor') : copy(locale, 'Get feedback on your work', 'Krijg feedback op je werk')}</h4></div>
+      <span className={`worldline-ai-status ${configured ? 'ready' : ''}`}>{configured ? copy(locale, 'LiteLLM · Claude ready', 'LiteLLM · Claude klaar') : copy(locale, 'LiteLLM not configured', 'LiteLLM niet geconfigureerd')}</span>
+    </div>
+    <div className="worldline-ai-tabs" role="tablist" aria-label={copy(locale, 'AI learning mode', 'AI-leermodus')}>
+      <button type="button" role="tab" aria-selected={mode === 'tutor'} className={mode === 'tutor' ? 'selected' : ''} onClick={() => { setMode('tutor'); setAnswer(null); }}>{<MessageCircle size={14}/>} {copy(locale, 'Tutor', 'Tutor')}</button>
+      <button type="button" role="tab" aria-selected={mode === 'evaluate'} className={mode === 'evaluate' ? 'selected' : ''} onClick={() => { setMode('evaluate'); setAnswer(null); }}>{<Check size={14}/>} {copy(locale, 'Evaluate my work', 'Mijn werk evalueren')}</button>
+    </div>
+    <form onSubmit={submit}>
+      {mode === 'evaluate' && <label>{copy(locale, 'Rubric (optional)', 'Rubric (optioneel)')}<input value={rubric} onChange={(event) => setRubric(event.target.value)} maxLength={1600} placeholder={copy(locale, 'What should Claude look for?', 'Waar moet Claude op letten?')}/></label>}
+      <label htmlFor="worldline-ai-prompt">{mode === 'tutor' ? copy(locale, 'Your question', 'Jouw vraag') : copy(locale, 'Your submission', 'Jouw inzending')}<textarea id="worldline-ai-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} maxLength={4000} rows={4} placeholder={mode === 'tutor' ? copy(locale, 'Explain the idea I am stuck on…', 'Leg het idee uit waar ik op vastloop…') : copy(locale, 'Paste your answer, plan or evidence here…', 'Plak hier je antwoord, plan of bewijs…')} disabled={room.me.role === 'Facilitator'}/></label>
+      <div className="worldline-ai-actions"><button type="submit" className="gradient" disabled={!configured || busy || !prompt.trim() || room.me.role === 'Facilitator'}>{busy ? copy(locale, 'Thinking…', 'Denken…') : mode === 'tutor' ? copy(locale, 'Ask Claude', 'Vraag Claude') : copy(locale, 'Review', 'Review')}<Send size={15}/></button><small>{copy(locale, 'Server-side LiteLLM gateway · Claude model', 'Server-side LiteLLM-gateway · Claude-model')}</small></div>
+    </form>
+    {error && <p className="worldline-ai-error" role="alert">{error}</p>}
+    {answer && <div className="worldline-ai-answer"><div className="worldline-ai-answer-meta"><strong>{answer.model}</strong><span>{copy(locale, 'AI response', 'AI-antwoord')}</span></div><MarkdownContent value={answer.content}/></div>}
+  </section>;
+}
 
 function MarkdownContent({value}) {
   const lines = String(value || '').split(/\r?\n/);
@@ -156,6 +209,7 @@ export function WorldlineCourse({room}) {
           <h3>{localizedLesson.title}</h3>
           <p className="worldline-lesson-description">{localizedLesson.description}</p>
           <MarkdownContent value={localizedLesson.content}/>
+          <AiStudio room={room} lesson={localizedLesson} locale={locale}/>
           {(localizedLesson.exercises || []).length > 0 && <div className="worldline-exercises">
             <div className="worldline-section-label"><span>{copy(locale, 'PRACTICE LAB', 'PRACTICE LAB')}</span><small>{localizedLesson.exercises.length} {copy(locale, 'exercises', 'oefeningen')}</small></div>
             {localizedLesson.exercises.map((exercise) => {

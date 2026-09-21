@@ -42,6 +42,22 @@ Open als deelnemer **Mijn leercoach** en klik **Kopieer voor je Claude**. Plak d
 
 Claude configureert de remote MCP in lokale projectscope, controleert de sessie-identiteit via `get_mission` en leest daarna het gedeelde document en lesmateriaal. Mogelijk vraagt Claude om toestemming of een herstart om nieuwe tools te laden. De UI meldt alleen een geslaagde MCP-aanroep na werkelijk gebruik, niet na kopiëren. Clipboardblokkering geeft een selecteerbaar alternatief. De instructie bevat tijdelijke privétoegang en hoort uitsluitend in de eigen agent.
 
+## Worldline en Claude via LiteLLM
+
+Een facilitator kiest bij het maken van een squad tussen de bestaande AetherLink-supporttrack en de Worldline AI-First Academy. De tracks delen identiteit en classroom, maar bewaren supportdag en Worldline-lesvoortgang afzonderlijk. De Worldline-cursus gebruikt de gedeelde course registry en biedt deelnemers Tutor en Evaluate my work.
+
+Configureer de server-side gateway met:
+
+```dotenv
+LITELLM_BASE_URL=https://litellm.example.internal
+LITELLM_API_KEY=redacted-server-secret
+LITELLM_TUTOR_MODEL=anthropic/claude-sonnet-4-5
+LITELLM_EVALUATOR_MODEL=anthropic/claude-opus-4-1
+LITELLM_MAX_TOKENS=700
+```
+
+De gateway accepteert alleen Claude/Anthropic-modelnamen, gebruikt uitsluitend server-side credentials en publiceert via `/game/ai/config` alleen status, modelnamen en tokenlimiet. TLS, netwerkrestricties, rate limiting en auth horen op de LiteLLM/ingress-laag te worden afgedwongen; de Academy-routes vereisen bovendien een geldige deelnemerssessie.
+
 ## Twee eigen accounts: nog uit te voeren
 
 Na de HTTPS-deployment verbinden twee deelnemers ieder hun eigen Claude Code met hun eigen gametoken. Laat beide dezelfde missie/documentcontext ophalen, echte tests in hun eigen starter uitvoeren en bewijs met een unieke `requestId` indienen. Controleer toegeschreven bijdragen, gelijktijdige documentbewerkingen, herverbinding en tokenrevocatie. Voeg voor de squadgrootte twee testdeelnemers in aparte browserprofielen toe. Menselijk accepteren en afwijzen via Academy zijn lokaal met echte Proof-voorstellen getest. De accounttest en publieke regressie zijn nog niet afgerond.

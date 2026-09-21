@@ -6,6 +6,7 @@ import {Knowledge,Coach,Lesson,Solo,Review,Route,Debrief} from './panels';
 import {Decks} from './slides';
 import {I18nProvider,LanguageToggle,useT,useI18n} from './i18n';
 import {classroomEmbedUrl,CLASSROOM_SANDBOX} from './classroom';
+import {COURSE_IDS} from '../packages/course-contract/index.mjs';
 import './style.css';
 
 const WorldlineCourse=lazy(()=>import('./worldline/WorldlineCourse').then(module=>({default:module.WorldlineCourse})));
@@ -204,6 +205,7 @@ function Join({ready,action,busy,error,joined}){
       </div>}
       <form onSubmit={e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));action(async()=>{if(facilitatorOverview){setOverview(await api('facilitator/overview',data));return;}const result=await api(create?'create':'join',data);saveSession(result);if(!create)history.replaceState(null,'',location.pathname);joined();});}}>
         {!facilitatorOverview&&<label htmlFor="join-name">{create?t('join.nameSquad'):t('join.nameYou')}<input id="join-name" ref={!create?nameRef:null} name="name" required maxLength={50} placeholder={create?t('join.placeholderSquad'):t('join.placeholderName')} autoComplete="nickname"/></label>}
+        {create&&<label htmlFor="join-course">{t('join.course')}<select id="join-course" name="courseId" defaultValue={COURSE_IDS.SUPPORT}><option value={COURSE_IDS.SUPPORT}>{t('join.courseSupport')}</option><option value={COURSE_IDS.WORLDLINE}>{t('join.courseWorldline')}</option></select></label>}
         {(facilitatorOverview||create)&&!facilitator&&<label htmlFor="join-hostkey">{t('join.hostKey')}<input id="join-hostkey" name="hostKey" value={hostKey} onChange={e=>setHostKey(e.target.value)} required={!googleSso||facilitatorOverview} type="password" autoComplete="off" placeholder={t('join.hostKeyPlaceholder')}/></label>}
         {participant&&<label htmlFor="join-code">{t('join.roomCode')}<input id="join-code" name="code" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} required type="text" autoComplete="off" placeholder={t('join.roomCodePlaceholder')} spellCheck={false}/></label>}
         <button type="submit" className="gradient" disabled={busy}>{busy?t('join.submitBusy'):facilitatorOverview?t('join.submitOverview'):create?t('join.submitCreate'):t('join.submitJoin')}<ArrowRight size={18}/></button>
@@ -238,8 +240,9 @@ function FacilitatorControls({room,control,busy,connected,onOpenClassroom}){
       <label>{t('fac.roundMin')}<input type="number" min={1} max={120} value={duration} onChange={e=>setDuration(e.target.value)} onBlur={()=>commit(duration,'duration')} onKeyDown={enter}/></label>
     </div>
     <div className="facilitator-controls-row facilitator-controls-context" aria-label={t('fac.context')}>
+      <label>{t('fac.course')}<select value={room.courseId||COURSE_IDS.SUPPORT} onChange={e=>control('course',e.target.value)}><option value={COURSE_IDS.SUPPORT}>{t('fac.courseSupport')}</option><option value={COURSE_IDS.WORLDLINE}>{t('fac.courseWorldline')}</option></select></label>
       <label>{t('fac.phase')}<select value={room.phase} onChange={e=>control('phase',e.target.value)}>{phases.map(p=><option key={p}>{p}</option>)}</select></label>
-      <label>{t('fac.day')}<select value={room.day} onChange={e=>control('day',Number(e.target.value))}>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>
+      <label>{t('fac.day')}<select value={room.supportDay||room.day} onChange={e=>control('day',Number(e.target.value))}>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>
       <label>{t('fac.format')}<select value={room.mode} onChange={e=>control('mode',e.target.value)}><option value="lesson">{t('fac.format.lesson')}</option><option value="solo">{t('fac.format.solo')}</option><option value="squad">{t('fac.format.squad')}</option><option value="review">{t('fac.format.review')}</option></select></label>
       <button type="button" className="classroom-open" onClick={onOpenClassroom} aria-label={t('classroom.open')}><Presentation size={16}/>{t('classroom.title')}</button>
     </div>
