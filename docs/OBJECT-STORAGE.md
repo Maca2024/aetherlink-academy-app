@@ -9,7 +9,7 @@ Without credentials the feature stays off. Every `/game/files` route answers 503
 Create the bucket in the EU jurisdiction, so objects stay in the EU:
 
 ```bash
-npx wrangler r2 bucket create aetherlink-academy --jurisdiction eu
+npx wrangler r2 bucket create aetherlink-academy-eu --jurisdiction eu
 ```
 
 A jurisdiction is not the same as a location hint. The dashboard's **Location**, such as `Western Europe (WEUR)`, is a placement hint and carries no residency guarantee. A jurisdiction does guarantee it. Read the S3 API endpoint to tell them apart: a jurisdiction-restricted EU bucket has a `.eu.` segment in its host, a bucket with only a location hint does not.
@@ -17,8 +17,10 @@ A jurisdiction is not the same as a location hint. The dashboard's **Location**,
 The jurisdiction decides the endpoint host, and it is fixed at creation. An EU bucket is reachable only at `https://<account-id>.eu.r2.cloudflarestorage.com`. A bucket created without a jurisdiction uses the plain `https://<account-id>.r2.cloudflarestorage.com`. Both hosts answer the same authorization error to an unsigned request, so probing them tells you nothing. Check an existing bucket instead:
 
 ```bash
-npx wrangler r2 bucket info aetherlink-academy
+npx wrangler r2 bucket info aetherlink-academy-eu -J eu
 ```
+
+Pass `-J eu` to every wrangler command that touches a jurisdiction-restricted bucket. Without it the API looks in the default jurisdiction and reports that the bucket does not exist.
 
 To change the jurisdiction of a bucket that already exists, create a new one and copy the objects across. There is no in-place move.
 
@@ -26,7 +28,7 @@ To change the jurisdiction of a bucket that already exists, create a new one and
 
 1. Open the Cloudflare dashboard, then **R2 object storage** → **API** → **Manage API tokens**.
 2. Create a token with **Object Read & Write**.
-3. Scope it to `aetherlink-academy` alone. Do not use an account-wide admin token.
+3. Scope it to `aetherlink-academy-eu` alone. Do not use an account-wide admin token.
 4. Copy the **Access Key ID** and the **Secret Access Key**. Cloudflare shows the secret once.
 
 ## Configure the server
@@ -35,8 +37,8 @@ Add these to `/root/aetherlink-academy/.env` on the VPS, mode 600. Never commit 
 
 | Variable | Value |
 | --- | --- |
-| `S3_BUCKET` | `aetherlink-academy` |
-| `S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com`, or the `.eu.` host for an EU bucket |
+| `S3_BUCKET` | `aetherlink-academy-eu` |
+| `S3_ENDPOINT` | `https://<account-id>.eu.r2.cloudflarestorage.com` for an EU bucket, or the host without `.eu.` otherwise |
 | `S3_ACCESS_KEY_ID` | the token's access key id |
 | `S3_SECRET_ACCESS_KEY` | the token's secret access key |
 | `S3_REGION` | leave unset; it defaults to `auto`, which is what R2 expects |
