@@ -2,5 +2,22 @@
   "name": "@academy/actions",
   "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web-mcp": "./src/adapters/web-mcp.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "build": "tsgo -p tsconfig.build.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "effect": "catalog:effect4"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:effect4",
+    "@types/node": "24.13.6",
+    "esbuild": "0.25.12"
+  }
 }

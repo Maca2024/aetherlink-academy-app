@@ -1,0 +1,17 @@
+export type {ActionDefinition, ActionIntent, ActionScope} from './action.ts';
+export {defineAction} from './action.ts';
+export {registry} from './actions/index.ts';
+export {toChatTools} from './adapters/chat.ts';
+export {ActionsHttpApi, ActionsHttpHandlers, toHttpApiGroup} from './adapters/http.ts';
+export {toMcpTools} from './adapters/mcp.ts';
+export type {ActionDescriptor, ActionTool, ActionToolCallArgs} from './adapters/tool-adapter.ts';
+export {buildActionTools, describeActions} from './adapters/tool-adapter.ts';
+export type {RemoteActionInvoke, WebMcpTool} from './adapters/web-mcp.ts';
+export {toWebMcpTools} from './adapters/web-mcp.ts';
+export type {Caller, ActionRole} from './caller.ts';
+export {CallerResolver, type CallerResolverShape} from './caller-resolver.ts';
+export {ConfirmationStore, ConfirmationStoreLive, type ConfirmationBinding, type ConfirmationStoreShape} from './confirmation.ts';
+export {dispatch, dispatchDecoded, decodeInput, encodeOutput, hashEncoded, type DispatchRequest} from './dispatcher.ts';
+export * from './errors.ts';
+export {toFullJsonSchema} from './json-schema.ts';
+export {emptyRegistry, findAction, registerAction, type ActionRegistry} from './registry.ts';
