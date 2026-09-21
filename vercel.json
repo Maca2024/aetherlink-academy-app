@@ -1,0 +1,23 @@
+{
+  "buildCommand": "pnpm run build:legacy",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/game/:path*", "destination": "http://91.99.78.17:4317/game/:path*" },
+    { "source": "/auth/:path*", "destination": "http://91.99.78.17:4317/auth/:path*" },
+    { "source": "/mcp/:path*", "destination": "http://91.99.78.17:4317/mcp/:path*" },
+    { "source": "/api/:path*", "destination": "http://91.99.78.17:4317/api/:path*" },
+    { "source": "/assets/:path*", "destination": "http://91.99.78.17:4317/assets/:path*" },
+    { "source": "/ws/:path*", "destination": "http://91.99.78.17:4317/ws/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    }
+  ]
+}
