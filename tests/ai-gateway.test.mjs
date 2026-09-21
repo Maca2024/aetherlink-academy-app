@@ -14,6 +14,7 @@ test('LiteLLM config exposes no secret and preserves Claude model routing', () =
   assert.equal(config.configured, true);
   assert.equal(publicAiConfig(env).tutorModel, 'anthropic/claude-sonnet-4-6');
   assert.equal(Object.hasOwn(publicAiConfig(env), 'apiKey'), false);
+  assert.equal(readAiConfig({LITELLM_BASE_URL: 'https://llm.example.test', LITELLM_API_KEY: 'secret-key'}).evaluatorModel, 'anthropic/claude-opus-4-8');
 });
 
 test('LiteLLM gateway sends the key only server-side and returns Claude content', async () => {
