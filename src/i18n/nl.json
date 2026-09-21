@@ -126,6 +126,7 @@
   "join.login.disabled": "Google-login is nu niet beschikbaar. Gebruik de startsleutel of vraag de beheerder.",
   "join.login.token": "Google kon je account niet bevestigen. Probeer opnieuw in te loggen.",
   "join.login.verify": "Google kon je account niet bevestigen. Probeer opnieuw in te loggen.",
+  "join.login.session": "Je Google-login is gelukt, maar de facilitator-sessie kon niet worden opgeslagen. Probeer opnieuw of gebruik de startsleutel.",
   "join.login.state": "Je Google-login is onderbroken. Start opnieuw met de Google-knop.",
   "join.login.expired": "Je Google-login is verlopen. Start opnieuw met de Google-knop.",
   "join.login.mismatch": "Je Google-login klopte niet meer. Start opnieuw met de Google-knop.",
@@ -328,5 +329,14 @@
   "decks.notes": "Presentatienotities",
   "decks.editHint": "Slide-id {id} in deck {deckId}. Je Claude bewerkt deze met update_slide; gebruik de contentHash uit get_deck.",
   "decks.newSlideHeading": "Nieuwe slide",
-  "decks.newSlideBody": "Vervang deze tekst of laat je Claude hem schrijven."
+  "decks.newSlideBody": "Vervang deze tekst of laat je Claude hem schrijven.",
+  "classroom.title": "Classroom",
+  "classroom.open": "Classroom-modus openen",
+  "classroom.exit": "Classroom sluiten",
+  "classroom.exitShort": "Sluiten",
+  "classroom.dayHint": "Dag {day}",
+  "classroom.frameTitle": "Classroom-slides",
+  "path.label": "Pad",
+  "path.aria": "Progressief pad",
+  "path.doneWhen": "Klaar als"
 }

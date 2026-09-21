@@ -1,10 +1,11 @@
 import React,{useEffect,useState,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Users,BookOpen,Compass,Target,Sparkles,ClipboardCheck,Sun,Moon,ArrowRight,Clock,Play,Pause,RotateCw,Shuffle,HelpCircle,Check,LogOut,Copy,FileText,ExternalLink,Presentation} from 'lucide-react';
+import {Users,BookOpen,Compass,Target,Sparkles,ClipboardCheck,Sun,Moon,ArrowRight,Clock,Play,Pause,RotateCw,Shuffle,HelpCircle,Check,LogOut,Copy,FileText,ExternalLink,Presentation,X} from 'lucide-react';
 import {api,authApi,getToken,saveSession} from './api';
 import {Knowledge,Coach,Lesson,Solo,Review,Route,Debrief} from './panels';
 import {Decks} from './slides';
 import {I18nProvider,LanguageToggle,useT,useI18n} from './i18n';
+import {classroomEmbedUrl,CLASSROOM_SANDBOX} from './classroom';
 import './style.css';
 
 const phases=['Plan','Design','Build','Test','Deploy','Maintain'];
@@ -40,6 +41,7 @@ function App(){
   const [connected,setConnected]=useState(false);
   const [busy,setBusy]=useState(false);
   const [copied,setCopied]=useState(null);
+  const [classroomOpen,setClassroomOpen]=useState(false);
   const copiedTimer=useRef(null);
   useEffect(()=>()=>clearTimeout(copiedTimer.current),[]);
   useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem('academy-theme',theme);},[theme]);
@@ -63,7 +65,8 @@ function App(){
       <div className="room-heading"><div><p className="muted">{t('room.supportDay',{day:room.day})} · {dayLabel}</p><h1>{room.name}</h1></div><div className="round"><span>{t('room.round',{round:room.round})} · {roundStatus}</span><strong><Clock size={22}/><Timer room={room}/></strong></div></div>
       <div className="sdlc" aria-label={t('room.sdlc')}>{phases.map((p,i)=><React.Fragment key={p}><div className={p===room.phase?'active':''}><span>{p}</span></div>{i<5&&<span className="phase-line"/>}</React.Fragment>)}</div>
       {error&&<div className="error" role="alert">{error}<button onClick={()=>setError('')} aria-label={t('common.closeAlert')}>×</button></div>}
-      {facilitator&&<FacilitatorControls room={room} control={control} busy={busy} connected={connected}/>}
+      {facilitator&&<FacilitatorControls room={room} control={control} busy={busy} connected={connected} onOpenClassroom={()=>setClassroomOpen(true)}/>}
+      {facilitator&&classroomOpen&&<ClassroomOverlay room={room} onClose={()=>setClassroomOpen(false)}/>}
       <div className="workspace">
         <section className="primary">{view==='squad'&&<Document room={room} theme={theme}/>}{view==='route'&&<Route room={room} onNavigate={setView}/>}{view==='lesson'&&<Lesson room={room} action={action} busy={busy}/>}{view==='solo'&&<Solo room={room} action={action} busy={busy} onNavigate={setView}/>}{view==='coach'&&<Coach room={room} action={action}/>}{view==='review'&&<Review room={room} action={action} busy={busy}/>}{view==='decks'&&<Decks room={room} action={action} busy={busy}/>}{view==='debrief'&&facilitator&&<Debrief room={room}/>}</section>
         <aside className="right-rail">
@@ -81,6 +84,78 @@ function App(){
       </div>
       <footer>{t('room.footer')}</footer>
     </main>
+  </div>;
+}
+
+function ClassroomOverlay({room,onClose}){
+  const t=useT();
+  const frameRef=useRef(null);
+  const shellRef=useRef(null);
+  useEffect(()=>{
+    const prevOverflow=document.body.style.overflow;
+    const returnFocusTo=document.activeElement;
+    document.body.style.overflow='hidden';
+    try{if(!navigator.webdriver)document.documentElement.requestFullscreen?.();}catch{}
+    const exit=()=>{
+      try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}
+      onClose();
+    };
+    const focusable=()=>[...(shellRef.current?.querySelectorAll('button,iframe,[href],[tabindex]:not([tabindex="-1"])')||[])].filter(el=>!el.disabled);
+    // Walk to the next element that actually accepts focus: an iframe is only
+    // tabbable when its content is, so a fixed first/last pair is not reliable.
+    const step=(items,active,back)=>{
+      const n=items.length;
+      let i=items.indexOf(active);
+      if(i===-1)i=back?0:n-1;
+      for(let k=0;k<n;k++){
+        i=back?(i-1+n)%n:(i+1)%n;
+        items[i].focus();
+        if(document.activeElement===items[i])return true;
+      }
+      return false;
+    };
+    const onKey=e=>{
+      if(e.key==='Escape'){e.preventDefault();exit();return;}
+      if(e.key!=='Tab')return;
+      // The deck covers the whole app, so focus behind it is invisible: drive Tab
+      // ourselves instead of letting it reach the room controls underneath.
+      const items=focusable();
+      if(!items.length)return;
+      e.preventDefault();
+      step(items,document.activeElement,e.shiftKey);
+    };
+    // Safety net for focus we cannot see leaving: once it is inside the
+    // cross-origin deck, its Tab keys never reach this document, so the browser
+    // can hand focus back to whatever follows the overlay. Pull it in again.
+    const onFocusIn=e=>{
+      const shell=shellRef.current;
+      if(!shell||shell.contains(e.target))return;
+      const items=focusable();
+      if(items.length)step(items,null,false);
+    };
+    document.addEventListener('focusin',onFocusIn);
+    window.addEventListener('keydown',onKey);
+    focusable()[0]?.focus();
+    return()=>{
+      window.removeEventListener('keydown',onKey);
+      document.removeEventListener('focusin',onFocusIn);
+      document.body.style.overflow=prevOverflow;
+      try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}
+      returnFocusTo?.focus?.();
+    };
+  },[onClose]);
+  const exit=()=>{try{if(document.fullscreenElement)document.exitFullscreen?.();}catch{}onClose();};
+  return <div ref={shellRef} className="classroom-overlay" role="dialog" aria-modal="true" aria-label={t('classroom.title')} data-testid="classroom-overlay">
+    <div className="classroom-chrome">
+      <div className="classroom-chrome-left">
+        <Presentation size={18}/>
+        <strong>{t('classroom.title')}</strong>
+        <span className="classroom-day-hint">{t('classroom.dayHint',{day:room.day})}</span>
+        <span className="muted classroom-room-hint">{room.name}</span>
+      </div>
+      <button type="button" className="classroom-exit" onClick={exit} aria-label={t('classroom.exit')}><X size={16}/>{t('classroom.exitShort')}</button>
+    </div>
+    <iframe ref={frameRef} className="classroom-frame" src={classroomEmbedUrl(room.day)} title={t('classroom.frameTitle')} sandbox={CLASSROOM_SANDBOX} allow="fullscreen" allowFullScreen/>
   </div>;
 }
 
@@ -140,7 +215,7 @@ function Join({ready,action,busy,error,joined}){
   </main>;
 }
 
-function FacilitatorControls({room,control,busy,connected}){
+function FacilitatorControls({room,control,busy,connected,onOpenClassroom}){
   const t=useT();
   const [time,setTime]=useState(String(Math.ceil(room.remaining/60)));
   const [duration,setDuration]=useState(String(Math.ceil((room.roundSeconds||1500)/60)));
@@ -163,6 +238,7 @@ function FacilitatorControls({room,control,busy,connected}){
       <label>{t('fac.phase')}<select value={room.phase} onChange={e=>control('phase',e.target.value)}>{phases.map(p=><option key={p}>{p}</option>)}</select></label>
       <label>{t('fac.day')}<select value={room.day} onChange={e=>control('day',Number(e.target.value))}>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label>
       <label>{t('fac.format')}<select value={room.mode} onChange={e=>control('mode',e.target.value)}><option value="lesson">{t('fac.format.lesson')}</option><option value="solo">{t('fac.format.solo')}</option><option value="squad">{t('fac.format.squad')}</option><option value="review">{t('fac.format.review')}</option></select></label>
+      <button type="button" className="classroom-open" onClick={onOpenClassroom} aria-label={t('classroom.open')}><Presentation size={16}/>{t('classroom.title')}</button>
     </div>
   </div>;
 }
