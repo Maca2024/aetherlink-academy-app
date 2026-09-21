@@ -75,3 +75,11 @@ does not provide SSO, multi-instance coordination, or production-grade lesson
 storage. Initial deck content is deterministic template content; it is not
 AI-authored. The PoC deployments and their supporting databases are separate
 from the production Academy runtime.
+
+## Packaging follow-up
+
+After live acceptance, Dockerfile lint cleanup sorted apt packages, combined
+consecutive build commands, and used exec-form health checks. The deployed
+images above predate this packaging-only cleanup; application sources are the
+ones exercised in the recorded browser flow. A rebuild of this cleaned packaging
+is not included in the live acceptance claim.

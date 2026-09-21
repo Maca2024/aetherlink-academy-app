@@ -88,6 +88,7 @@ node_modules and VCS metadata. Do not use an API-container-invisible host path a
 
 ## Slides signup configuration
 
+Apply the scaffold patch with `git apply --unidiff-zero slides-auth.patch`.
 The only app-level adjustment is `slides-auth.patch`: a supported Better Auth
 plugin sets `emailAndPassword.autoSignIn=false`. With core 0.182.1 and PostgreSQL,
 the signup session hook otherwise reads the just-created user outside its active

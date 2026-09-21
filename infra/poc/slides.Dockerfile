@@ -10,7 +10,7 @@ FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git make g++ python3 \
+  && apt-get install -y --no-install-recommends ca-certificates g++ git make python3 \
   && rm -rf /var/lib/apt/lists/*
 
 # Install before copying source so dependency layers remain cacheable.  The
@@ -18,15 +18,11 @@ RUN apt-get update \
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # package.json pins pnpm 10.14.0 and Corepack's package-manager integrity hash.
 # Corepack validates and activates that exact package-manager artifact.
-RUN corepack install
-RUN corepack pnpm install --frozen-lockfile
+RUN corepack install && corepack pnpm install --frozen-lockfile
 
 COPY . .
-RUN corepack pnpm build
-
-# Nitro's node preset externalizes some dependencies.  Keep only production
-# dependencies in the final image after the build has consumed dev tooling.
-RUN corepack pnpm prune --prod
+# Nitro externalizes dependencies; prune dev tooling only after building.
+RUN corepack pnpm build && corepack pnpm prune --prod
 
 FROM ${NODE_IMAGE} AS runtime
 
@@ -60,7 +56,7 @@ EXPOSE 3000
 # The framework's ping endpoint is unauthenticated and does not require a
 # configured external provider.  DATABASE_URL is supplied at runtime.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/_agent-native/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/_agent-native/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", ".output/server/index.mjs"]

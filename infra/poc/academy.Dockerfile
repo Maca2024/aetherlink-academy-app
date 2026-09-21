@@ -12,4 +12,4 @@ ENV HOST=0.0.0.0 PORT=4339 PROOF_PORT=4439
 EXPOSE 4339
 ENV ACADEMY_WEB_DIST=/app/apps/web/dist
 CMD ["node", "apps/server/dist/main.js"]
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(async r=>{const b=await r.json();process.exit(r.ok&&b.ok&&b.proof?0:1)}).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(async r=>{const b=await r.json();process.exit(r.ok&&b.ok&&b.proof?0:1)}).catch(()=>process.exit(1))"]
