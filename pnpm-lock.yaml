@@ -136,7 +136,15 @@ importers:
         specifier: 24.13.6
         version: 24.13.6
 
-  packages/schema: {}
+  packages/schema:
+    dependencies:
+      effect:
+        specifier: catalog:effect4
+        version: 4.0.0-rc.117
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.6
+        version: 24.13.6
 
 packages:
 
