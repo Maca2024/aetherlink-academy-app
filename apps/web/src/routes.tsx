@@ -4,8 +4,9 @@ import {Deck, type DeckMode} from '@academy/deck';
 import {sourceSlides} from './deck/slides.js';
 import {normalizeSlides} from './deck/normalize.js';
 import './deck/deck.css';
+import {AuthoringPage} from './authoring/AuthoringPage.tsx';
 
-export type RouteId = 'squad' | 'route' | 'lesson' | 'solo' | 'coach' | 'review' | 'connection';
+export type RouteId = 'squad' | 'route' | 'lesson' | 'solo' | 'coach' | 'review' | 'connection' | 'authoring';
 
 export interface RouteDef {
   readonly id: RouteId;
@@ -23,7 +24,10 @@ export const ROUTES: ReadonlyArray<RouteDef> = [
   {id: 'connection', path: '/connection-status', labelKey: 'connection.status'},
 ];
 
+const AUTHORING_ROUTE: RouteDef = {id: 'authoring', path: '/authoring', labelKey: 'authoring.title'};
+
 export function matchRoute(pathname: string): RouteDef {
+  if (pathname === AUTHORING_ROUTE.path) return AUTHORING_ROUTE;
   return ROUTES.find((route) => route.path === pathname) ?? ROUTES[0]!;
 }
 
@@ -183,8 +187,9 @@ export function usePathname(): [string, (path: string) => void] {
 
 export function AppRoutes({children}: {readonly children?: ReactNode}) {
   const [pathname, navigate] = usePathname();
-  const connection = useConnection(fetchConnection, 5000, pathname !== '/deck');
+  const connection = useConnection(fetchConnection, 5000, pathname !== '/deck' && pathname !== '/authoring');
   if (pathname === '/deck') return <DeckDemo />;
+  if (pathname === '/authoring') return <AuthoringPage />;
   return (
     <>
       <Shell pathname={pathname} navigate={navigate} connection={connection} />
