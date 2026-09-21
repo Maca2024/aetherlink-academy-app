@@ -12,6 +12,8 @@ Create the bucket in the EU jurisdiction, so objects stay in the EU:
 npx wrangler r2 bucket create aetherlink-academy --jurisdiction eu
 ```
 
+A jurisdiction is not the same as a location hint. The dashboard's **Location**, such as `Western Europe (WEUR)`, is a placement hint and carries no residency guarantee. A jurisdiction does guarantee it. Read the S3 API endpoint to tell them apart: a jurisdiction-restricted EU bucket has a `.eu.` segment in its host, a bucket with only a location hint does not.
+
 The jurisdiction decides the endpoint host, and it is fixed at creation. An EU bucket is reachable only at `https://<account-id>.eu.r2.cloudflarestorage.com`. A bucket created without a jurisdiction uses the plain `https://<account-id>.r2.cloudflarestorage.com`. Both hosts answer the same authorization error to an unsigned request, so probing them tells you nothing. Check an existing bucket instead:
 
 ```bash
