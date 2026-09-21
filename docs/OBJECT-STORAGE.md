@@ -31,7 +31,39 @@ To change the jurisdiction of a bucket that already exists, create a new one and
 3. Scope it to `aetherlink-academy-eu` alone. Do not use an account-wide admin token.
 4. Copy the **Access Key ID** and the **Secret Access Key**. Cloudflare shows the secret once.
 
+## Store the credentials in 1Password
+
+The token is the only real secret here. Keep it in the `aetherlink-academy` vault and let everything else reference it.
+
+Create the item in the 1Password app, not with `op item create`. The CLI takes field values as command arguments, which writes the secret into your shell history and exposes it to any process listing for the life of the command.
+
+| Item property | Value |
+| --- | --- |
+| Vault | `aetherlink-academy` |
+| Title | `cloudflare-r2-academy-eu` |
+| Category | API Credential |
+| username | the access key id |
+| credential | the secret access key |
+
+## Run locally without the secret on disk
+
+`.env.1password` holds `op://` references rather than values, so the secret stays in the vault. Resolve it per command:
+
+```bash
+op run --env-file=.env.1password -- node --test tests/storage-s3.test.ts
+```
+
+The same wrapper starts the app against the real bucket:
+
+```bash
+op run --env-file=.env.1password -- node scripts/start.mjs
+```
+
+`op run` masks resolved values in output. Nothing writes them to disk.
+
 ## Configure the server
+
+The VPS has no 1Password agent, so production needs its own copy. 1Password stays the source of truth and this file is a copy of it.
 
 Add these to `/root/aetherlink-academy/.env` on the VPS, mode 600. Never commit them.
 
@@ -55,7 +87,7 @@ docker run -d --name academy-dev-minio -p 127.0.0.1:59000:9000 \
   quay.io/minio/minio:latest server /data
 ```
 
-Create the bucket once, then export the same four variables with `S3_ENDPOINT=http://127.0.0.1:59000`. The S3 layer signs path-style requests, which is the one dialect both R2 and MinIO accept unchanged, so no code path differs between them.
+Create the bucket once, then set the same four variables with `S3_ENDPOINT=http://127.0.0.1:59000`. MinIO credentials are throwaway and need no vault entry. The S3 layer signs path-style requests, which is the one dialect both R2 and MinIO accept unchanged, so no code path differs between them.
 
 Run the gated round-trip test with those variables set:
 
