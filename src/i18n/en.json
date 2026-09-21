@@ -126,6 +126,7 @@
   "join.login.disabled": "Google sign-in is unavailable right now. Use the start key or ask an admin.",
   "join.login.token": "Google could not confirm your account. Try signing in again.",
   "join.login.verify": "Google could not confirm your account. Try signing in again.",
+  "join.login.session": "Your Google sign-in worked, but the facilitator session could not be saved. Try again or use the start key.",
   "join.login.state": "Your Google sign-in was interrupted. Start again with the Google button.",
   "join.login.expired": "Your Google sign-in expired. Start again with the Google button.",
   "join.login.mismatch": "Your Google sign-in no longer matched. Start again with the Google button.",
