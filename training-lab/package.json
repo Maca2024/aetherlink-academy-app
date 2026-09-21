@@ -1,0 +1,21 @@
+{
+  "name": "training-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "start:mocks": "node scripts/start-mocks.mjs",
+    "test": "node --test tests/*.test.mjs day-01/tests/*.test.mjs day-02/tests/*.test.mjs day-03/tests/*.test.mjs day-04/tests/*.test.mjs day-05/tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "effect": "4.0.0-rc.117",
+    "zod": "4.6.4"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "ticketId": "TRAIN-TICKET-101",
+  "title": "Decide whether an umbrella reminder is needed",
+  "city": "Amsterdam",
+  "date": "2026-09-21",
+  "expectedDecision": "bring umbrella",
+  "fictional": true
+}

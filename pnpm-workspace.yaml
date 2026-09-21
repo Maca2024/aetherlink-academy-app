@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - training-lab
 
 allowBuilds:
   esbuild: true

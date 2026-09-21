@@ -1,0 +1,17 @@
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const rows = [
+  ["TX-FIC-401", "2026-09-21T09:10:00Z", "NL-TRAIN", "groceries", "card", "known", "low", 42.5],
+  ["TX-FIC-402", "2026-09-21T09:12:00Z", "NL-TRAIN", "electronics", "card", "new-device", "suspicious", 4200],
+  ["TX-FIC-403", "2026-09-21T09:15:00Z", "BE-TRAIN", "travel", "wallet", "known", "low", 88],
+  ["TX-FIC-404", "2026-09-21T23:58:00Z", "PT-TRAIN", "electronics", "card", "new-device", "suspicious", 7800],
+  ["TX-FIC-405", "2026-09-21T11:20:00Z", "NL-TRAIN", "books", "card", "known", "low", 25],
+  ["TX-FIC-406", "2026-09-21T03:03:00Z", "BE-TRAIN", "gaming", "bank-transfer", "new-device", "suspicious", 6100],
+];
+const header = "id,time,region,merchant_category,payment_method,device,expected_risk,amount_eur";
+const csv = `${header}\n${rows.map((row) => row.join(",")).join("\n")}\n`;
+const target = path.join(path.dirname(fileURLToPath(import.meta.url)), "transactions.csv");
+writeFileSync(target, csv);
+console.log(target);

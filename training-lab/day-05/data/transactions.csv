@@ -1,0 +1,3 @@
+id,amount_eur,region,risk
+TX-FIC-501,120,NL-TRAIN,low
+TX-FIC-502,6400,BE-TRAIN,high

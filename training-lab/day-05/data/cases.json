@@ -1,0 +1,23 @@
+[
+  {
+    "id": "CASE-FIC-501",
+    "title": "Settlement reconciliation helper",
+    "brief": "Compare fictional ledger rows with PSP rows and explain mismatches before a human review.",
+    "dataset": "settlement.csv",
+    "fictional": true
+  },
+  {
+    "id": "CASE-FIC-502",
+    "title": "Runbook knowledge assistant",
+    "brief": "Answer questions from the supplied fictional runbook and cite the source section.",
+    "dataset": "runbook.md",
+    "fictional": true
+  },
+  {
+    "id": "CASE-FIC-503",
+    "title": "Transaction monitor",
+    "brief": "Find high-risk fictional transactions and send an explainable review recommendation.",
+    "dataset": "transactions.csv",
+    "fictional": true
+  }
+]

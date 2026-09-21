@@ -1,0 +1,11 @@
+{
+  "ticket_id": "WL-1026",
+  "priority": "high",
+  "sentiment": "angry",
+  "recommended_action": "escalate",
+  "summary": "Customer reports a possible duplicate charge and threatens a complaint if it is not fixed today.",
+  "customer_reply": "We are sorry this happened. Your message needs prompt human review; this draft does not send a reply or confirm a refund.",
+  "risk_note": "Possible duplicate charge plus complaint threat is an escalation signal; confirm the charge through approved evidence.",
+  "draft_only": true,
+  "human_approval_required": true
+}

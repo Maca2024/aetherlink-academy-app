@@ -1,0 +1,11 @@
+{
+  "ticket_id": "WL-1026",
+  "priority": "low",
+  "sentiment": "neutral",
+  "recommended_action": "auto_reply",
+  "summary": "Customer asks where to find an invoice; no account action is supported by the supplied text.",
+  "customer_reply": "Thanks for contacting us. We will review your request and share the next step after a human review.",
+  "risk_note": "No escalation signal is present in this synthetic low-priority example.",
+  "draft_only": true,
+  "human_approval_required": true
+}
