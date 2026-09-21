@@ -296,5 +296,8 @@
   "debrief.noHandoffs": "Geen handoff vastgelegd.",
   "debrief.export": "Exporteer debrief",
   "roster.softMax": "12",
-  "fac.shuffleRoles": "Rollen schudden"
+  "fac.shuffleRoles": "Rollen schudden",
+  "path.label": "Pad",
+  "path.aria": "Progressief pad",
+  "path.doneWhen": "Klaar als"
 }

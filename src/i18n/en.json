@@ -296,5 +296,8 @@
   "debrief.noHandoffs": "No handoff recorded.",
   "debrief.export": "Export debrief",
   "roster.softMax": "12",
-  "fac.shuffleRoles": "Shuffle roles"
+  "fac.shuffleRoles": "Shuffle roles",
+  "path.label": "Path",
+  "path.aria": "Progressive path",
+  "path.doneWhen": "Done when"
 }
