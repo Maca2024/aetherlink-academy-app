@@ -1,6 +1,8 @@
 # Vercel Academy takedown plan
 
-Last updated: 2026-09-16 (Europe/Amsterdam)
+Last updated: 2026-09-20 (Europe/Amsterdam)
+
+**Status:** Hetzner is live and is now SoT. The in-repo cutover has landed — `vercel.json` removed, docs/workflows repointed at Hetzner. The Vercel-side steps below are the operator's and are tracked as done/not-done there, not here.
 
 **Goal:** Retire the **AetherLink Academy** app from Vercel Hobby once Hetzner is proven SoT.  
 **Non-goal:** Deleting the whole Vercel account or breaking `aetherlink.ai` / `www` marketing if those still use Vercel.

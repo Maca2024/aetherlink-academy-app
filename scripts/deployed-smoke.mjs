@@ -8,9 +8,6 @@ try {
   assert.equal(base.protocol, 'https:', 'Deployed checks require HTTPS');
   assert.equal(base.username + base.password, '', 'Credentials must not be embedded in the URL');
   assert.match(process.env.EXPECTED_REVISION || '', /^[0-9a-f]{40}$/, 'EXPECTED_REVISION must be the full source commit SHA');
-  if (process.env.GITHUB_EVENT_NAME === 'deployment_status') {
-    assert.match(base.hostname, /^aetherlink-academy(?:-[a-z0-9-]+)?\.vercel\.app$/, 'Automatic smoke targets the Academy Vercel project');
-  }
 } catch {
   writeFileSync('test-results/deployed-smoke.json', JSON.stringify({at:new Date().toISOString(),checks:[{name:'Valid Academy deployment metadata',passed:false}]}));
   console.error('FAIL: deployment metadata');

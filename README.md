@@ -46,9 +46,9 @@ Claude configureert de remote MCP in lokale projectscope, controleert de sessie-
 
 Na de HTTPS-deployment verbinden twee deelnemers ieder hun eigen Claude Code met hun eigen gametoken. Laat beide dezelfde missie/documentcontext ophalen, echte tests in hun eigen starter uitvoeren en bewijs met een unieke `requestId` indienen. Controleer toegeschreven bijdragen, gelijktijdige documentbewerkingen, herverbinding en tokenrevocatie. Voeg voor de squadgrootte twee testdeelnemers in aparte browserprofielen toe. Menselijk accepteren en afwijzen via Academy zijn lokaal met echte Proof-voorstellen getest. De accounttest en publieke regressie zijn nog niet afgerond.
 
-## Docker en Vercel
+## Docker
 
-`Dockerfile` en `Dockerfile.vercel` bouwen app plus Proof. De lokale Compose-configuratie vereist runtimecredentials en bewaart ontwikkelsleutels in een volume. Duurzame applicatietoestand staat extern. Docker is hier niet beschikbaar; de aparte CI/CD-taak verzorgt een echte build. De Vercel-startguard blijft actief tot de gedeelde runtime is geverifieerd. Zie [deploymentstatus](docs/DEPLOYMENT.md). Domain cutover runbook: [GoDaddy → academy.aetherlink.ai](docs/domain-godaddy.md). Vercel retire guide (no delete without Ryan GO): [Vercel Academy takedown](docs/vercel-academy-takedown.md).
+`Dockerfile` bouwt app plus Proof en is wat de Hetzner-productieruntime via Compose bouwt. De lokale Compose-configuratie vereist runtimecredentials en bewaart ontwikkelsleutels in een volume. Duurzame applicatietoestand staat extern. Docker is hier niet beschikbaar; de aparte CI/CD-taak verzorgt een echte build. Zie [deploymentstatus](docs/DEPLOYMENT.md). Domain cutover runbook: [GoDaddy → academy.aetherlink.ai](docs/domain-godaddy.md). Vercel is afgebouwd; de historische takedown staat in [Vercel Academy takedown](docs/vercel-academy-takedown.md).
 
 ## Controles en grenzen
 
@@ -61,7 +61,7 @@ De eerdere integratie- en samenwerkingstests vereisen een draaiende server via `
 
 De oorspronkelijke rendererhang is lokaal opgelost en opnieuw in de browser gecontroleerd. Publieke acceptatie en de volledige gedistribueerde regressie zijn nog niet geslaagd. [progress.md](progress.md) bevat de actuele resultaten en beperkingen. Het [gedateerde browserrapport](../demo/VERIFICATION.md) is een werkmapartefact buiten deze repository. Zie ook [architectuur](docs/ARCHITECTURE.md).
 
-Dit is een lokaal pilot-MVP: de driverrol stuurt de werkvorm, geen exclusief schrijfrecht in Proof. Alle menselijke editors kunnen het document bewerken. Namen/squadcodes zijn geen geverifieerde identiteit. De tien ingebouwde lessen zijn een compacte MVP-inhoud; het volledige externe curriculumdocument is niet geïmporteerd. Enkele native Proof-bedieningen zijn Engels. Liveblocks is beoordeeld maar niet geïntegreerd. De broncoderepository is [RyanLisse/aetherlink-academy-app](https://github.com/RyanLisse/aetherlink-academy-app) en de publieke deployment draait op https://aetherlink-academy-app.vercel.app in Vercel-regio fra1. Deployed acceptatie wordt bewezen met `scripts/deployed-mcp-check.mjs` en `scripts/deployed-browser-acceptance.mjs`; zie [handleiding deelnemer](docs/handleiding-deelnemer.md) en [handleiding facilitator](docs/handleiding-facilitator.md).
+Dit is een lokaal pilot-MVP: de driverrol stuurt de werkvorm, geen exclusief schrijfrecht in Proof. Alle menselijke editors kunnen het document bewerken. Namen/squadcodes zijn geen geverifieerde identiteit. De tien ingebouwde lessen zijn een compacte MVP-inhoud; het volledige externe curriculumdocument is niet geïmporteerd. Enkele native Proof-bedieningen zijn Engels. Liveblocks is beoordeeld maar niet geïntegreerd. De broncoderepository is [RyanLisse/aetherlink-academy-app](https://github.com/RyanLisse/aetherlink-academy-app) en de publieke deployment draait op de Hetzner CX33 `aetherlink-academy` (http://91.99.78.17:4317). Deployed acceptatie wordt bewezen met `scripts/deployed-mcp-check.mjs` en `scripts/deployed-browser-acceptance.mjs`; zie [handleiding deelnemer](docs/handleiding-deelnemer.md) en [handleiding facilitator](docs/handleiding-facilitator.md).
 
 ## Kwaliteitschecks
 

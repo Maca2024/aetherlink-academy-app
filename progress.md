@@ -1,6 +1,6 @@
 # Progress — AetherLink Academy
 
-Last updated: 2026-09-20 (Europe/Amsterdam) — Slide decks (Effect-TS port of agent-native slides), AET-12 thin slice + AET-18 Vercel takedown guide
+Last updated: 2026-09-21 (Europe/Amsterdam) — Slide decks (Effect-TS port of agent-native slides); Hetzner cutover accepted, Vercel retired for Academy
 
 ## Live
 
@@ -23,12 +23,11 @@ Last updated: 2026-09-20 (Europe/Amsterdam) — Slide decks (Effect-TS port of a
 | AET-9 | Epic E verification / docs / Notion sync | Backlog |
 | AET-10 | i18n English default + EN/NL toggle | In Progress |
 | AET-12 | Thin slice: flexible squad + shuffle + soft rejoin | In Progress |
-| AET-18 | Plan + takedown Vercel Academy (guide only) | In Progress |
+| AET-18 | Takedown Vercel Academy | In-repo cutover done; Vercel-side steps with Ryan |
 
 ## Blocked / parked
 
 - **Openship edge + auto-deploy:** project linked to GitHub, but free `.opsh.io` routing needs Openship Cloud or a **custom domain** — sibling Docker remains deploy SoT until then
-- **Vercel Hobby:** account/deployments paused (Fluid Active CPU / related limits) — leave alone until Hetzner cutover is accepted
 - **Google facilitator SSO on Hetzner:** needs redirect URIs + env for `91.99.78.17:4317` (or future HTTPS domain) — see AET-6
 
 ## Recently decided
@@ -42,6 +41,7 @@ Last updated: 2026-09-20 (Europe/Amsterdam) — Slide decks (Effect-TS port of a
 ## Next / related
 
 - **AET-11** domain guide in-repo (`docs/domain-godaddy.md`) — **guide only**; live GoDaddy A record + TLS cutover is a follow-up (Ryan does registrar; ops/Herdr does VPS proxy). Do **not** mutate DNS from this PR.
-- **AET-18** Vercel Academy takedown guide (`docs/vercel-academy-takedown.md`) — **guide only**; do **not** delete the Vercel project until Ryan GO. Leave apex/www alone.
+- **AET-18** Vercel retired for Academy. In-repo cutover landed (`vercel.json` removed; README/DEPLOYMENT/ROLLBACK/BUILD-IDENTITY/RELEASE-EVIDENCE/ARCHITECTURE/handleiding repointed at Hetzner; `deployed-smoke.yml` no longer gated on `vercel[bot]`). Remaining on the Vercel side: disconnect the GitHub integration (this is what still red-Xes PRs), then archive/delete the Academy project. Leave apex/www alone.
+- **Open cleanup:** `Dockerfile.vercel` is still the hardened image the CI `container` job builds, and the plain `Dockerfile` (what Hetzner Compose builds) lacks its `SOURCE_REVISION` arg and pinned digest. Merging the two touches the production build, so it is deliberately not part of the Vercel cutover.
 - **AET-12** thin slice: lift hard cap 5→soft max 12, shuffle Driver/Navigator, soft rejoin by name+code. Phase advance already works (Plan→Maintain) — no code change.
 - Related: AET-6 OAuth redirects once `https://academy.aetherlink.ai` is live; Openship edge remains blocked until custom domain attached.
