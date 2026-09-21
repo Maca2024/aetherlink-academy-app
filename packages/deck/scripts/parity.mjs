@@ -64,7 +64,8 @@ function provenance() {
 }
 
 async function installClock(page) {
-  await page.clock.install({time: fixedEpoch});
+  await page.clock.install({time: fixedEpoch - 1000});
+  await page.clock.pauseAt(fixedEpoch);
 }
 
 function trackFailures(page) {
@@ -89,6 +90,10 @@ async function assertReady(page, side, failures) {
       brokenImages: images.filter((image) => !image.complete || image.naturalWidth === 0).map((image) => image.currentSrc || image.src),
     };
   });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('resize'));
+    void (document.querySelector('.academy-deck') ?? document.body).getBoundingClientRect().height;
+  });
   const assetFailures = [...failures];
   if (assets.fontStatus !== 'loaded') assetFailures.push({kind: 'font', status: assets.fontStatus});
   for (const src of assets.brokenImages) assetFailures.push({kind: 'image', url: src, error: 'not decoded'});
@@ -102,6 +107,35 @@ async function advanceAndSettle(source, port) {
     port.clock.runFor(2000),
   ]);
   await Promise.all([source.waitForTimeout(120), port.waitForTimeout(120)]);
+}
+
+async function waitForFiniteAnimations(page) {
+  await page.waitForFunction(() => [...document.getAnimations()].filter((animation) => {
+    const timing = animation.effect?.getComputedTiming();
+    return timing?.iterations !== Infinity;
+  }).every((animation) => animation.playState === 'finished'), undefined, {timeout: 10000});
+}
+
+async function waitForStableLayout(page) {
+  let previous = '';
+  let stableSamples = 0;
+  for (let attempt = 0; attempt < 12 && stableSamples < 2; attempt += 1) {
+    const current = await page.evaluate(() => {
+      const elements = [document.querySelector('#stage'), ...document.querySelectorAll('#stage > *, #stage *')];
+      return JSON.stringify(elements.filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }).map((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return [element.tagName, element.className, Math.round(rect.x * 100) / 100, Math.round(rect.y * 100) / 100, Math.round(rect.width * 100) / 100, Math.round(rect.height * 100) / 100, style.display, style.visibility, style.opacity, style.fontFamily, style.fontSize, style.lineHeight];
+      }));
+    });
+    stableSamples = current === previous ? stableSamples + 1 : 0;
+    previous = current;
+    if (stableSamples < 2) await page.waitForTimeout(40);
+  }
+  if (stableSamples < 2) throw new Error('layout did not settle after assets and clock advancement');
 }
 
 async function target(page, side, slide) {
@@ -154,13 +188,12 @@ const browser = await chromium.launch({headless: true});
 const report = [];
 try {
   for (const viewport of viewports) {
-    const source = await browser.newPage({viewport, deviceScaleFactor: 1, reducedMotion: 'reduce'});
-    const port = await browser.newPage({viewport, deviceScaleFactor: 1, reducedMotion: 'reduce'});
-    const sourceFailures = trackFailures(source);
-    const portFailures = trackFailures(port);
-    await installClock(source);
-    await installClock(port);
     for (const slide of slides) {
+      const source = await browser.newPage({viewport, deviceScaleFactor: 1, reducedMotion: 'reduce'});
+      const port = await browser.newPage({viewport, deviceScaleFactor: 1, reducedMotion: 'reduce'});
+      const sourceFailures = trackFailures(source);
+      const portFailures = trackFailures(port);
+      await Promise.all([installClock(source), installClock(port)]);
       sourceFailures.length = 0;
       portFailures.length = 0;
       const caseOutput = join(output, `${viewport.name}-slide-${String(slide).padStart(2, '0')}`);
@@ -173,8 +206,13 @@ try {
         const [sourceTarget, portTarget] = await Promise.all([target(source, 'source', slide), target(port, 'port', slide)]);
         item = {...item, sourceTitle: sourceTarget.title, portTitle: portTarget.title, titleMismatch: sourceTarget.title !== portTarget.title};
         await Promise.all([assertReady(source, 'source', sourceFailures), assertReady(port, 'port', portFailures)]);
+        await Promise.all([source.clock.runFor(32), port.clock.runFor(32)]);
         await advanceAndSettle(source, port);
+        await Promise.all([waitForFiniteAnimations(source), waitForFiniteAnimations(port)]);
+        await Promise.all([source.waitForTimeout(120), port.waitForTimeout(120)]);
         await Promise.all([assertReady(source, 'source', sourceFailures), assertReady(port, 'port', portFailures)]);
+        await Promise.all([source.clock.runFor(32), port.clock.runFor(32)]);
+        await Promise.all([waitForStableLayout(source), waitForStableLayout(port)]);
         const [sourceBuffer, portBuffer] = await Promise.all([source.screenshot({fullPage: true}), port.screenshot({fullPage: true})]);
         const comparison = comparePng(sourceBuffer, portBuffer);
         item = {...item, source: [comparison.sourcePng.width, comparison.sourcePng.height], port: [comparison.portPng.width, comparison.portPng.height], geometryMismatch: !comparison.sameDimensions, differentPixels: comparison.differentPixels, comparedPixels: comparison.comparedPixels};
@@ -192,8 +230,8 @@ try {
         }
       }
       report.push(item);
+      await Promise.all([source.close(), port.close()]);
     }
-    await Promise.all([source.close(), port.close()]);
   }
 } finally {
   await browser.close();
