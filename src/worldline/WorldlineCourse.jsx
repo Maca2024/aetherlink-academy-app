@@ -17,7 +17,7 @@ const firstLessonId = allLessons[0]?.id || null;
 
 const copy = (locale, en, nl) => locale === 'nl' ? nl : en;
 
-function AiStudio({room, lesson, locale}) {
+function AiStudio({room, lesson, lessonContext, locale}) {
   const [config, setConfig] = useState(null);
   const [mode, setMode] = useState('tutor');
   const [prompt, setPrompt] = useState('');
@@ -39,8 +39,8 @@ function AiStudio({room, lesson, locale}) {
     setError('');
     try {
       const next = mode === 'tutor'
-        ? await api('ai/tutor', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, prompt})
-        : await api('ai/evaluate', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, submission: prompt, rubric: rubric || undefined});
+        ? await api('ai/tutor', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, prompt, context: lessonContext})
+        : await api('ai/evaluate', {courseId: COURSE_IDS.WORLDLINE, lessonId: lesson?.id, submission: prompt, rubric: rubric || undefined, context: lessonContext});
       setAnswer(next);
     } catch (cause) {
       setError(cause.message);
@@ -66,6 +66,56 @@ function AiStudio({room, lesson, locale}) {
     </form>
     {error && <p className="worldline-ai-error" role="alert">{error}</p>}
     {answer && <div className="worldline-ai-answer"><div className="worldline-ai-answer-meta"><strong>{answer.model}</strong><span>{copy(locale, 'AI response', 'AI-antwoord')}</span></div><MarkdownContent value={answer.content}/></div>}
+  </section>;
+}
+
+const feedbackOptions = [
+  {value: 'strong', en: 'Strong', nl: 'Sterk', hintEn: 'I can use this', hintNl: 'Ik kan dit gebruiken'},
+  {value: 'almost', en: 'Almost there', nl: 'Bijna daar', hintEn: 'I need one more example', hintNl: 'Ik heb nog een voorbeeld nodig'},
+  {value: 'review', en: 'Review this concept', nl: 'Herlees dit concept', hintEn: 'I want to revisit it', hintNl: 'Ik wil dit opnieuw bekijken'},
+  {value: 'not-ready', en: 'Not assessable yet', nl: 'Nog niet beoordeelbaar', hintEn: 'I need more context', hintNl: 'Ik heb meer context nodig'},
+];
+
+function LessonFeedback({room, lesson, locale}) {
+  const [selected, setSelected] = useState(null);
+  const [note, setNote] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setSelected(null);
+    setNote('');
+    setStatus('idle');
+    setError('');
+  }, [lesson?.id]);
+
+  async function save(rating, extraNote = '') {
+    if (room.me.role === 'Facilitator') return;
+    setSelected(rating);
+    setStatus('sending');
+    setError('');
+    try {
+      await api('worldline-feedback', {lessonId: lesson.id, rating, note: extraNote || note});
+      setStatus('saved');
+    } catch (cause) {
+      setStatus('idle');
+      setError(cause.message);
+    }
+  }
+
+  return <section className="worldline-feedback" aria-labelledby="worldline-feedback-title">
+    <div className="worldline-feedback-heading">
+      <div><p className="worldline-section-label"><span><Sparkles size={14}/> LEARNING SIGNAL</span></p><h4 id="worldline-feedback-title">{copy(locale, 'Did this lesson land?', 'Kwam deze les aan?')}</h4></div>
+      <span>{copy(locale, 'Your signal tunes the next session.', 'Jouw signaal helpt de volgende sessie beter worden.')}</span>
+    </div>
+    <div className="worldline-feedback-grid" role="group" aria-label={copy(locale, 'Lesson feedback', 'Lesfeedback')}>
+      {feedbackOptions.map((option) => <button key={option.value} type="button" className={selected === option.value ? 'selected' : ''} disabled={room.me.role === 'Facilitator' || status === 'sending'} onClick={() => save(option.value)}>
+        <strong>{locale === 'nl' ? option.nl : option.en}</strong><small>{locale === 'nl' ? option.hintNl : option.hintEn}</small>
+      </button>)}
+    </div>
+    {selected && <div className="worldline-feedback-note"><label htmlFor="worldline-feedback-note">{copy(locale, 'Optional note', 'Optionele toelichting')}<textarea id="worldline-feedback-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} rows={2} placeholder={copy(locale, 'What should we tune for the next learner?', 'Wat kunnen we voor de volgende deelnemer aanscherpen?')} /></label><button type="button" className="worldline-feedback-note-button" disabled={status === 'sending' || room.me.role === 'Facilitator'} onClick={() => save(selected, note)}>{copy(locale, 'Add note', 'Toelichting opslaan')}</button></div>}
+    {status === 'saved' && <p className="worldline-feedback-success" role="status"><Check size={14}/> {copy(locale, 'Thanks — signal saved.', 'Dank je — signaal opgeslagen.')}</p>}
+    {error && <p className="worldline-ai-error" role="alert">{error}</p>}
   </section>;
 }
 
@@ -130,6 +180,9 @@ export function WorldlineCourse({room}) {
   const localizedCurrentDay = currentDay ? getLocalizedDay(currentDay, locale) : null;
   const completedCount = completedLessons.size;
   const nextLesson = lesson ? allLessons[allLessons.findIndex((candidate) => candidate.id === lesson.id) + 1] : null;
+  const nextOpenLesson = allLessons.find((candidate) => !completedLessons.has(candidate.id)) || null;
+  const nextOpenLessonLocalized = nextOpenLesson ? getLocalizedLesson(nextOpenLesson, locale) : null;
+  const lessonContext = localizedLesson ? [localizedLesson.title, localizedLesson.description, localizedLesson.content].filter(Boolean).join('\n\n') : '';
 
   function selectWeek(nextWeek) {
     setActiveWeekId(nextWeek.id);
@@ -171,6 +224,13 @@ export function WorldlineCourse({room}) {
         <div><strong>{curriculum.length}</strong><span>{copy(locale, 'levels', 'levels')}</span></div>
         <div><strong>{allExercises.length}</strong><span>{copy(locale, 'labs & exercises', 'labs & oefeningen')}</span></div>
       </div>
+      <div className="worldline-hero-mission"><span>{copy(locale, 'YOUR NEXT SIGNAL', 'JOUW VOLGENDE SIGNAAL')}</span><strong>{nextOpenLessonLocalized?.title || copy(locale, 'Path complete', 'Route afgerond')}</strong><small>{nextOpenLessonLocalized ? `${nextOpenLessonLocalized.duration} min · ${copy(locale, 'one practical move', 'één praktische stap')}` : copy(locale, 'You made the whole path visible.', 'Je hebt de hele route zichtbaar gemaakt.')}</small></div>
+    </div>
+
+    <div className="worldline-context-strip" aria-label={copy(locale, 'Course promises', 'Cursusprincipes')}>
+      <span><i>01</i>{copy(locale, 'Learn with evidence', 'Leren met bewijs')}</span>
+      <span><i>02</i>{copy(locale, 'Practice with Claude', 'Oefenen met Claude')}</span>
+      <span><i>03</i>{copy(locale, 'Ship with human review', 'Opleveren met menselijke review')}</span>
     </div>
 
     {error && <div className="error" role="alert">{error}</div>}
@@ -208,8 +268,9 @@ export function WorldlineCourse({room}) {
           <div className="worldline-lesson-meta"><span>{localizedLesson.type}</span><span>{localizedLesson.duration} min</span><span>{lessonIsComplete ? copy(locale, 'Completed', 'Afgerond') : copy(locale, 'In progress', 'Bezig')}</span></div>
           <h3>{localizedLesson.title}</h3>
           <p className="worldline-lesson-description">{localizedLesson.description}</p>
+          <div className="worldline-lesson-intent"><div><span>{copy(locale, 'LEAVE WITH', 'JE LOOPT WEG MET')}</span><strong>{copy(locale, 'A usable idea, not a tab left open.', 'Een bruikbaar idee, niet nog een open tabblad.')}</strong></div><span className="worldline-lesson-intent-dot" aria-hidden="true" /></div>
           <MarkdownContent value={localizedLesson.content}/>
-          <AiStudio room={room} lesson={localizedLesson} locale={locale}/>
+          <AiStudio room={room} lesson={localizedLesson} lessonContext={lessonContext} locale={locale}/>
           {(localizedLesson.exercises || []).length > 0 && <div className="worldline-exercises">
             <div className="worldline-section-label"><span>{copy(locale, 'PRACTICE LAB', 'PRACTICE LAB')}</span><small>{localizedLesson.exercises.length} {copy(locale, 'exercises', 'oefeningen')}</small></div>
             {localizedLesson.exercises.map((exercise) => {
@@ -229,6 +290,7 @@ export function WorldlineCourse({room}) {
             </button>
             {nextLesson && <button type="button" className="worldline-next" onClick={() => openLesson(nextLesson)}>{copy(locale, 'Next lesson', 'Volgende les')} <ArrowRight size={17}/></button>}
           </div>
+          <LessonFeedback room={room} lesson={localizedLesson} locale={locale}/>
         </article>}
       </div>
     </div>

@@ -101,7 +101,7 @@ export class PostgresStore {
    const existing=r.members.find(m=>m.name.toLowerCase()===name.toLowerCase());
    if (existing) return {token:await this.session(client,r.id,existing.id,'browser'),roomId:r.id,rejoined:true};
    if (r.members.length>=MAX_SQUAD_SIZE) fail(409,`Squad is vol (maximaal ${MAX_SQUAD_SIZE}).`);
-   const p={id:randomUUID(),name,help:false,quiz:null,route:'standard',progressByDay:{},worldlineProgress:{completedLessonIds:[],completedExerciseIds:[],activeLessonId:null,updatedAt:null},lastMcp:null};
+   const p={id:randomUUID(),name,help:false,quiz:null,route:'standard',progressByDay:{},worldlineProgress:{completedLessonIds:[],completedExerciseIds:[],activeLessonId:null,updatedAt:null},worldlineFeedback:[],lastMcp:null};
    r.members.push(p);r.version++;
    await this.save(client,r);
    return {token:await this.session(client,r.id,p.id,'browser'),roomId:r.id};

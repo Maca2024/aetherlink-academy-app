@@ -62,6 +62,7 @@ test('1000 synthetic Worldline lesson journeys stay isolated across six employee
     }
 
     let apiMutations = 0;
+    let feedbackMutations = 0;
     for (let mutation = 0; mutation < journeys; mutation += 1) {
       const participant = participants[mutation % participants.length];
       const lesson = lessons[mutation % lessons.length];
@@ -73,6 +74,14 @@ test('1000 synthetic Worldline lesson journeys stay isolated across six employee
       assert.equal(result.status, 200);
       assert.equal(result.body.courseId, COURSE_IDS.WORLDLINE);
       apiMutations += 1;
+      const feedback = await call(app, '/game/worldline-feedback', participant.token, {
+        lessonId: lesson.id,
+        rating: ['strong', 'almost', 'review', 'not-ready'][mutation % 4],
+        note: `Synthetic candidate signal ${mutation}`,
+      });
+      assert.equal(feedback.status, 200);
+      assert.equal(feedback.body.lessonId, lesson.id);
+      feedbackMutations += 1;
     }
 
     const progress = await Promise.all(participants.map((participant) => call(app, '/game/worldline-progress', participant.token)));
@@ -81,9 +90,9 @@ test('1000 synthetic Worldline lesson journeys stay isolated across six employee
     assert.equal(uniqueLessonsPerEmployee.reduce((sum, count) => sum + count, 0), new Set(lessons.map((lesson) => lesson.id)).size);
     assert.ok(uniqueLessonsPerEmployee.every((count) => count > 0));
 
-    const report = {employees: employees.length, journeys, lessonsPerJourney: lessons.length, lessonTransitions, exerciseTransitions, apiMutations, uniqueLessonsPerEmployee};
+    const report = {employees: employees.length, journeys, lessonsPerJourney: lessons.length, lessonTransitions, exerciseTransitions, apiMutations, feedbackMutations, uniqueLessonsPerEmployee};
     console.log(`[worldline-simulation] ${JSON.stringify(report)}`);
-    assert.deepEqual(report, {employees: 6, journeys: 1000, lessonsPerJourney: 84, lessonTransitions: 84000, exerciseTransitions: 41000, apiMutations: 1000, uniqueLessonsPerEmployee});
+    assert.deepEqual(report, {employees: 6, journeys: 1000, lessonsPerJourney: 84, lessonTransitions: 84000, exerciseTransitions: 41000, apiMutations: 1000, feedbackMutations: 1000, uniqueLessonsPerEmployee});
   } finally {
     rmSync(dir, {recursive: true, force: true});
   }
